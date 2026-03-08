@@ -35,9 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let allDrawings = []; 
     let currentViewedProfile = ''; 
-    let publishMode = 'drawing'; // 'drawing', 'avatar', или 'edit'
-    let editingDrawingId = null; // Храним ID рисунка, если мы его редактируем
-    let editingDrawingTitle = ""; // Храним старое название
+    let publishMode = 'drawing'; 
+    let editingDrawingId = null; 
+    let editingDrawingTitle = ""; 
 
     // Редактор
     let isDrawing = false;
@@ -50,18 +50,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentUser) showScreen('main');
     else showScreen('login');
 
+    // ИСПРАВЛЕННАЯ ЛОГИКА ВХОДА
     loginBtn.addEventListener('click', async () => {
         const nickname = nickInput.value.trim();
-        if (!nickname) return;
+        if (!nickname) {
+            document.getElementById('nickname-error').textContent = 'Введите ник';
+            return;
+        }
+        
         const userRef = ref(db, 'users/' + nickname);
-        const snapshot = await get(userRef);
-        if (snapshot.exists() && localStorage.getItem('bitpaint_currentUser') !== nickname) {
-             document.getElementById('nickname-error').textContent = 'Этот ник занят.';
-        } else {
-             if (!snapshot.exists()) await set(userRef, { joined: serverTimestamp(), avatar: '' });
-             currentUser = nickname;
-             localStorage.setItem('bitpaint_currentUser', currentUser);
-             showScreen('main');
+        try {
+            const snapshot = await get(userRef);
+            // Если аккаунта нет - создаем. Если есть - просто пускаем (без пароля)
+            if (!snapshot.exists()) {
+                await set(userRef, { joined: serverTimestamp(), avatar: '' });
+            }
+            
+            currentUser = nickname;
+            localStorage.setItem('bitpaint_currentUser', currentUser);
+            document.getElementById('nickname-error').textContent = ''; // очищаем ошибку
+            showScreen('main');
+            
+        } catch (error) {
+            console.error("Ошибка входа:", error);
+            document.getElementById('nickname-error').textContent = 'Ошибка соединения с базой.';
         }
     });
 
@@ -76,7 +88,6 @@ document.addEventListener('DOMContentLoaded', () => {
             publishMode = 'drawing';
             listenForDrawings(); 
         } else if (screenName === 'editor') {
-            // Если не режим редактирования старого рисунка, то создаем чистый холст
             if (publishMode !== 'edit') setTimeout(setupCanvas, 50); 
         } else if (screenName === 'leaderboard') {
             generateLeaderboard();
@@ -152,13 +163,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 drawing.commentsList = drawing.comments ? Object.values(drawing.comments) : [];
                 allDrawings.push(drawing);
             });
-            allDrawings.sort((a, b) => b.timestamp - a.timestamp);
+            // Безопасная сортировка на случай старых рисунков без времени
+            allDrawings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
             if (screens.main.classList.contains('active')) {
                 const gallery = document.getElementById('gallery-container');
                 gallery.innerHTML = '';
                 allDrawings.forEach(d => renderDrawingCard(d, gallery));
-            } else if (screens.profile.classList.contains('active')) showProfile(currentViewedProfile);
+            } else if (screens.profile.classList.contains('active')) {
+                showProfile(currentViewedProfile);
+            }
         });
     }
 
@@ -168,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLiked = drawing.likesList.includes(currentUser);
         const title = drawing.title || "Без названия";
 
-        // Кнопка редактирования только для автора
         const editBtnHtml = drawing.author === currentUser 
             ? `<button class="edit-card-btn" data-id="${drawing.id}" title="Дорисовать/Изменить"><i class="fas fa-edit"></i></button>` 
             : '';
@@ -201,7 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
-        // Логика кнопки "Изменить"
         const editBtn = card.querySelector('.edit-card-btn');
         if (editBtn) {
             editBtn.addEventListener('click', () => {
@@ -209,7 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 editingDrawingId = drawing.id;
                 editingDrawingTitle = drawing.title || "";
                 
-                // Переходим в редактор и загружаем картинку на холст
                 screens.main.classList.remove('active');
                 screens.profile.classList.remove('active');
                 screens.editor.classList.add('active');
@@ -303,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();    
     }
 
-    // --- АЛГОРИТМ УМНОЙ ЗАЛИВКИ (ФИГУР) ---
+    // АЛГОРИТМ ЗАЛИВКИ
     function hexToRgba(hex) {
         let r = parseInt(hex.slice(1, 3), 16);
         let g = parseInt(hex.slice(3, 5), 16);
@@ -312,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function matchColor(data, pos, targetR, targetG, targetB) {
-        // Добавляем небольшую погрешность (tolerance) для закрашивания краев сглаженных линий
         const tolerance = 50; 
         return Math.abs(data[pos] - targetR) <= tolerance &&
                Math.abs(data[pos+1] - targetG) <= tolerance &&
@@ -323,57 +333,58 @@ document.addEventListener('DOMContentLoaded', () => {
         startX = Math.floor(startX);
         startY = Math.floor(startY);
         
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        const targetPos = (startY * canvas.width + startX) * 4;
-        const targetR = data[targetPos];
-        const targetG = data[targetPos + 1];
-        const targetB = data[targetPos + 2];
-        const targetA = data[targetPos + 3];
-        
-        const fillRgba = hexToRgba(fillColorHex);
+        try {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            const targetPos = (startY * canvas.width + startX) * 4;
+            const targetR = data[targetPos];
+            const targetG = data[targetPos + 1];
+            const targetB = data[targetPos + 2];
+            
+            const fillRgba = hexToRgba(fillColorHex);
 
-        // Если кликнули на тот же цвет - ничего не делаем
-        if (Math.abs(targetR - fillRgba[0]) < 10 && Math.abs(targetG - fillRgba[1]) < 10 && Math.abs(targetB - fillRgba[2]) < 10) return;
+            if (Math.abs(targetR - fillRgba[0]) < 10 && Math.abs(targetG - fillRgba[1]) < 10 && Math.abs(targetB - fillRgba[2]) < 10) return;
 
-        const stack = [[startX, startY]];
-        
-        while (stack.length > 0) {
-            let [x, y] = stack.pop();
-            let pos = (y * canvas.width + x) * 4;
+            const stack = [[startX, startY]];
             
-            while (y-- >= 0 && matchColor(data, pos, targetR, targetG, targetB)) pos -= canvas.width * 4;
-            pos += canvas.width * 4;
-            ++y;
-            
-            let reachLeft = false;
-            let reachRight = false;
-            
-            while (y++ < canvas.height - 1 && matchColor(data, pos, targetR, targetG, targetB)) {
-                data[pos] = fillRgba[0];
-                data[pos+1] = fillRgba[1];
-                data[pos+2] = fillRgba[2];
-                data[pos+3] = 255;
+            while (stack.length > 0) {
+                let [x, y] = stack.pop();
+                let pos = (y * canvas.width + x) * 4;
                 
-                if (x > 0) {
-                    if (matchColor(data, pos - 4, targetR, targetG, targetB)) {
-                        if (!reachLeft) { stack.push([x - 1, y]); reachLeft = true; }
-                    } else if (reachLeft) { reachLeft = false; }
-                }
-                
-                if (x < canvas.width - 1) {
-                    if (matchColor(data, pos + 4, targetR, targetG, targetB)) {
-                        if (!reachRight) { stack.push([x + 1, y]); reachRight = true; }
-                    } else if (reachRight) { reachRight = false; }
-                }
+                while (y-- >= 0 && matchColor(data, pos, targetR, targetG, targetB)) pos -= canvas.width * 4;
                 pos += canvas.width * 4;
+                ++y;
+                
+                let reachLeft = false;
+                let reachRight = false;
+                
+                while (y++ < canvas.height - 1 && matchColor(data, pos, targetR, targetG, targetB)) {
+                    data[pos] = fillRgba[0];
+                    data[pos+1] = fillRgba[1];
+                    data[pos+2] = fillRgba[2];
+                    data[pos+3] = 255;
+                    
+                    if (x > 0) {
+                        if (matchColor(data, pos - 4, targetR, targetG, targetB)) {
+                            if (!reachLeft) { stack.push([x - 1, y]); reachLeft = true; }
+                        } else if (reachLeft) { reachLeft = false; }
+                    }
+                    
+                    if (x < canvas.width - 1) {
+                        if (matchColor(data, pos + 4, targetR, targetG, targetB)) {
+                            if (!reachRight) { stack.push([x + 1, y]); reachRight = true; }
+                        } else if (reachRight) { reachRight = false; }
+                    }
+                    pos += canvas.width * 4;
+                }
             }
+            ctx.putImageData(imageData, 0, 0);
+        } catch (e) {
+            console.error("Не удалось выполнить заливку (вероятно из-за CORS ограничений картинки):", e);
         }
-        ctx.putImageData(imageData, 0, 0);
     }
 
-    // Обработка рисования
     function startDrawing(e) {
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
@@ -382,7 +393,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const x = clientX - rect.left;
         const y = clientY - rect.top;
 
-        // Если выбран инструмент "Заливка"
         if (currentTool === 'fill') {
             floodFill(x, y, document.getElementById('color-picker').value);
             saveState();
@@ -438,7 +448,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', setupCanvas);
 
     document.querySelectorAll('.tool-btn').forEach(btn => {
-        if(btn.id === 'undo-button') return;
-        btn.addEventListener('click', () => {
-            document.querySelector('.tool-btn.active')?.classList.remove('active');
-            btn.clas
+        if(bt
