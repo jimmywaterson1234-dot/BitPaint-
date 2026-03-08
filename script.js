@@ -1,17 +1,25 @@
+// Импортируем нужные функции из новой модульной версии Firebase v12
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+// Ваша конфигурация, которую вы прислали
+const firebaseConfig = {
+    apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
+    authDomain: "bitpaint-f7dbd.firebaseapp.com",
+    databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com",
+    projectId: "bitpaint-f7dbd",
+    storageBucket: "bitpaint-f7dbd.firebasestorage.app",
+    messagingSenderId: "193627137592",
+    appId: "1:193627137592:web:4f3835e21c0adf024468cd",
+    measurementId: "G-2JR3GPQ60R"
+};
+
+// Инициализируем Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Ждем загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 1. ИНИЦИАЛИЗАЦИЯ FIREBASE ---
-    // Используем вашу ссылку на базу данных
-    const firebaseConfig = {
-        databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com"
-        // Примечание: для полноценной работы на реальном сервере сюда нужно будет 
-        // добавить apiKey и projectId из настроек Firebase, но для локального теста базы этого часто достаточно.
-    };
-    
-    // Запускаем Firebase
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.database();
 
     // --- Элементы DOM ---
     const loginScreen = document.getElementById('login-screen');
@@ -29,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('paint-canvas');
     const ctx = canvas.getContext('2d');
     
-    // Инструменты
     const toolBtns = document.querySelectorAll('.tool-btn');
     const colorPicker = document.getElementById('color-picker');
     const lineWidthSlider = document.getElementById('line-width');
@@ -38,40 +45,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const publishButton = document.getElementById('publish-button');
     const backToGalleryButton = document.getElementById('back-to-gallery-button');
 
-    // Переменные состояния
+    // --- Переменные состояния ---
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let isDrawing = false;
     let currentTool = 'pencil';
     let lastX, lastY, startX, startY;
     let snapshotImg;
 
-    // --- 2. ЛОГИКА ВХОДА И УПРАВЛЕНИЕ ЭКРАНАМИ ---
-    
+    // --- Логика входа ---
     if (currentUser) {
         showScreen('main');
     } else {
         showScreen('login');
     }
 
-    loginButton.addEventListener('click', () => {
+    loginButton.addEventListener('click', async () => {
         const nickname = nicknameInput.value.trim();
         if (!nickname) {
             nicknameError.textContent = 'Ник не может быть пустым.';
             return;
         }
 
-        // Проверяем, есть ли пользователь в БД
-        db.ref('users/' + nickname).once('value', (snapshot) => {
+        const userRef = ref(db, 'users/' + nickname);
+        
+        try {
+            const snapshot = await get(userRef);
             if (snapshot.exists() && localStorage.getItem('bitpaint_currentUser') !== nickname) {
                  nicknameError.textContent = 'Этот ник уже кем-то занят.';
             } else {
-                 // Сохраняем нового пользователя
-                 db.ref('users/' + nickname).set(true);
+                 await set(userRef, true); // Сохраняем в БД
                  currentUser = nickname;
                  localStorage.setItem('bitpaint_currentUser', currentUser);
                  showScreen('main');
             }
-        });
+        } catch (error) {
+            console.error("Ошибка при входе:", error);
+            nicknameError.textContent = 'Ошибка подключения к базе.';
+        }
     });
 
     drawButton.addEventListener('click', () => showScreen('editor'));
@@ -87,38 +97,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (screenName === 'main') {
             currentUserNickname.textContent = currentUser;
             mainScreen.classList.add('active');
-            // При переходе на главный экран начинаем слушать базу данных
-            listenForDrawings(); 
+            listenForDrawings(); // Запускаем синхронизацию галереи
         } else if (screenName === 'editor') {
             editorScreen.classList.add('active');
             setTimeout(setupCanvas, 50); 
         }
     }
 
-    // --- 3. МАГИЯ РЕАЛЬНОГО ВРЕМЕНИ (FIREBASE LISTENERS) ---
-    
+    // --- МАГИЯ РЕАЛЬНОГО ВРЕМЕНИ ---
     function listenForDrawings() {
-        // .on('value') срабатывает КАЖДЫЙ раз, когда кто-то добавляет рисунок, ставит лайк или пишет коммент
-        db.ref('drawings').on('value', (snapshot) => {
-            galleryContainer.innerHTML = ''; // Очищаем галерею
+        const drawingsRef = ref(db, 'drawings');
+        
+        // onValue автоматически срабатывает при ЛЮБОМ изменении в базе
+        onValue(drawingsRef, (snapshot) => {
+            galleryContainer.innerHTML = ''; 
             
             const drawings = [];
-            // Перебираем данные из базы
             snapshot.forEach((childSnapshot) => {
                 const drawing = childSnapshot.val();
-                drawing.id = childSnapshot.key; // Уникальный ID из Firebase
+                drawing.id = childSnapshot.key;
                 
-                // Firebase хранит лайки/комменты как объекты, превращаем в массивы для удобства
                 drawing.likesList = drawing.likes ? Object.keys(drawing.likes) : [];
                 drawing.commentsList = drawing.comments ? Object.values(drawing.comments) : [];
                 
                 drawings.push(drawing);
             });
 
-            // Сортируем так, чтобы новые были сверху
+            // Сортируем: новые сверху
             drawings.sort((a, b) => b.timestamp - a.timestamp);
-
-            // Отрисовываем карточки
             drawings.forEach(renderDrawingCard);
             addCardEventListeners();
         });
@@ -160,28 +166,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const drawingId = card.dataset.id;
             
             // Обработка клика по лайку
-            card.querySelector('.like-btn').addEventListener('click', () => {
-                const likeRef = db.ref(`drawings/${drawingId}/likes/${currentUser}`);
-                likeRef.once('value', snapshot => {
-                    if (snapshot.exists()) {
-                        likeRef.remove(); // Если лайк был - убираем
-                    } else {
-                        likeRef.set(true); // Если нет - ставим
-                    }
-                });
+            card.querySelector('.like-btn').addEventListener('click', async () => {
+                const likeRef = ref(db, `drawings/${drawingId}/likes/${currentUser}`);
+                const snapshot = await get(likeRef);
+                if (snapshot.exists()) {
+                    await remove(likeRef); // Убираем лайк
+                } else {
+                    await set(likeRef, true); // Ставим лайк
+                }
             });
 
             // Обработка отправки комментария
-            card.querySelector('.comment-input-form').addEventListener('submit', (e) => {
+            card.querySelector('.comment-input-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const input = e.currentTarget.querySelector('.comment-input');
                 const commentText = input.value.trim();
                 
                 if (commentText) {
-                    db.ref(`drawings/${drawingId}/comments`).push({
+                    const commentsRef = ref(db, `drawings/${drawingId}/comments`);
+                    await push(commentsRef, {
                         author: currentUser,
                         text: commentText,
-                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                        timestamp: serverTimestamp()
                     });
                     input.value = '';
                 }
@@ -189,27 +195,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 4. ПУБЛИКАЦИЯ В БАЗУ ---
-    publishButton.addEventListener('click', () => {
+    // --- ПУБЛИКАЦИЯ В БАЗУ ---
+    publishButton.addEventListener('click', async () => {
         publishButton.disabled = true;
         publishButton.textContent = 'Публикация...';
 
-        const imageURL = canvas.toDataURL('image/png'); // Получаем картинку как текст
-        
-        // Отправляем в Firebase
-        db.ref('drawings').push({
-            author: currentUser,
-            image: imageURL,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        }).then(() => {
+        const imageURL = canvas.toDataURL('image/png'); 
+        const drawingsRef = ref(db, 'drawings');
+
+        try {
+            await push(drawingsRef, {
+                author: currentUser,
+                image: imageURL,
+                timestamp: serverTimestamp()
+            });
             publishButton.disabled = false;
             publishButton.innerHTML = '<i class="fas fa-upload"></i> Опубликовать';
             alert('Рисунок опубликован!');
             showScreen('main');
-        });
+        } catch (error) {
+            console.error("Ошибка публикации:", error);
+            alert("Произошла ошибка при публикации.");
+            publishButton.disabled = false;
+        }
     });
 
-    // --- 5. ЛОГИКА РИСОВАНИЯ (БЕЗ ИЗМЕНЕНИЙ) ---
+    // --- ЛОГИКА РИСОВАНИЯ ---
     function setupCanvas() {
         const editorContainer = document.querySelector('.editor-container');
         canvas.width = editorContainer.offsetWidth;
