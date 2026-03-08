@@ -26,25 +26,21 @@
         <header>
             <div class="logo">BitPaint</div>
             <div class="user-info">
+                <button id="leaderboard-button" class="header-btn" title="Зал славы"><i class="fas fa-trophy"></i> Топ</button>
                 <span id="current-user-nickname" class="clickable-nick current-user-nick" title="Мой профиль"></span>
-                <button id="draw-button">
-                    <i class="fas fa-pencil-alt"></i> Рисовать
-                </button>
+                <button id="draw-button"><i class="fas fa-pencil-alt"></i> Рисовать</button>
             </div>
         </header>
         <main id="gallery-container" class="gallery-grid"></main>
     </div>
 
-    <!-- ЭКРАН ПРОФИЛЯ (НОВОЕ) -->
+    <!-- ЭКРАН ПРОФИЛЯ -->
     <div id="profile-screen" class="screen">
-        <header class="profile-top-bar">
-            <button id="back-from-profile-button" class="icon-button"><i class="fas fa-arrow-left"></i> В ленту</button>
+        <header class="top-bar">
+            <button class="icon-button back-to-main"><i class="fas fa-arrow-left"></i> В ленту</button>
         </header>
-        
         <div class="profile-header-card">
-            <div class="profile-avatar-container">
-                <img id="profile-avatar-img" src="" alt="Аватар">
-            </div>
+            <div class="profile-avatar-container"><img id="profile-avatar-img" src="" alt="Аватар"></div>
             <div class="profile-info">
                 <h2 id="profile-nickname">@Nick</h2>
                 <div class="profile-stats">
@@ -54,15 +50,31 @@
             </div>
             <button id="edit-avatar-button"><i class="fas fa-user-edit"></i> Нарисовать аватар</button>
         </div>
-        
-        <h3 class="profile-gallery-title">Галерея пользователя</h3>
+        <h3 class="section-title">Галерея пользователя</h3>
         <main id="profile-gallery-container" class="gallery-grid"></main>
+    </div>
+
+    <!-- ЭКРАН ЗАЛА СЛАВЫ (НОВОЕ) -->
+    <div id="leaderboard-screen" class="screen">
+        <header class="top-bar">
+            <button class="icon-button back-to-main"><i class="fas fa-arrow-left"></i> Назад</button>
+        </header>
+        <h2 class="section-title" style="text-align: center; color: var(--accent-neon); font-size: 32px; border-bottom: none;"><i class="fas fa-crown" style="color: gold;"></i> Зал Славы (Топ-10)</h2>
+        <div class="leaderboard-container">
+            <ul id="leaderboard-list">
+                <!-- Список будет генерироваться через JS -->
+            </ul>
+        </div>
     </div>
 
     <!-- Экран рисования (Редактор) -->
     <div id="editor-screen" class="screen">
         <div class="editor-container">
             <div class="toolbar">
+                <div class="tool-group">
+                    <button class="tool-btn" id="undo-button" title="Отменить (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+                    <button class="tool-btn" id="neon-toggle-btn" title="Включить Неон!"><i class="fas fa-magic"></i></button>
+                </div>
                 <div class="tool-group">
                     <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
                     <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
@@ -83,7 +95,7 @@
                 </div>
                 <div class="tool-group right-align">
                      <button id="publish-button"><i class="fas fa-upload"></i> Готово</button>
-                     <button id="back-to-gallery-button"><i class="fas fa-times"></i> Отмена</button>
+                     <button id="back-to-gallery-button"><i class="fas fa-times"></i></button>
                 </div>
             </div>
             <canvas id="paint-canvas"></canvas>
