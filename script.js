@@ -17,7 +17,6 @@ const db = getDatabase(app);
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- DOM Элементы ---
     const screens = {
         login: document.getElementById('login-screen'),
         main: document.getElementById('main-screen'),
@@ -33,20 +32,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('paint-canvas');
     const ctx = canvas.getContext('2d');
 
-    // --- Состояние ---
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let allDrawings = []; 
     let currentViewedProfile = ''; 
     let publishMode = 'drawing'; 
 
-    // Редактор: Неон и Отмена
+    // Редактор
     let isDrawing = false;
     let currentTool = 'pencil';
     let isNeonMode = false;
-    let undoStack = []; // Массив для сохранения истории
+    let undoStack = []; 
     let lastX, lastY, startX, startY, snapshotImg;
 
-    // --- Логика входа ---
+    // Вход
     if (currentUser) showScreen('main');
     else showScreen('login');
 
@@ -65,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Навигация ---
+    // Навигация
     function showScreen(screenName) {
         Object.values(screens).forEach(s => s.classList.remove('active'));
         screens[screenName].classList.add('active');
@@ -83,15 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('draw-button').addEventListener('click', () => { publishMode = 'drawing'; showScreen('editor'); });
-    document.getElementById('back-to-gallery-button').addEventListener('click', () => { 
-        if(publishMode === 'avatar') showProfile(currentUser); else showScreen('main'); 
-    });
+    document.getElementById('back-to-gallery-button').addEventListener('click', () => { if(publishMode === 'avatar') showProfile(currentUser); else showScreen('main'); });
     document.getElementById('edit-avatar-button').addEventListener('click', () => { publishMode = 'avatar'; showScreen('editor'); });
     document.getElementById('leaderboard-button').addEventListener('click', () => showScreen('leaderboard'));
-    
-    document.querySelectorAll('.back-to-main').forEach(btn => {
-        btn.addEventListener('click', () => showScreen('main'));
-    });
+    document.querySelectorAll('.back-to-main').forEach(btn => btn.addEventListener('click', () => showScreen('main')));
 
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('clickable-nick')) {
@@ -100,22 +93,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- ЗАЛ СЛАВЫ (Топ-10) ---
+    // Топ-10
     function generateLeaderboard() {
         const stats = {};
-        // Считаем лайки каждого автора
         allDrawings.forEach(d => {
             if (!stats[d.author]) stats[d.author] = { likes: 0, drawings: 0 };
             stats[d.author].drawings++;
             stats[d.author].likes += d.likesList.length;
         });
 
-        // Сортируем и берем Топ 10
-        const sortedUsers = Object.entries(stats)
-            .map(([name, data]) => ({ name, ...data }))
-            .sort((a, b) => b.likes - a.likes || b.drawings - a.drawings)
-            .slice(0, 10);
-
+        const sortedUsers = Object.entries(stats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.likes - a.likes || b.drawings - a.drawings).slice(0, 10);
         const list = document.getElementById('leaderboard-list');
         list.innerHTML = '';
 
@@ -129,19 +116,14 @@ document.addEventListener('DOMContentLoaded', () => {
             list.innerHTML += `
                 <li class="leader-item ${rankClass}">
                     <div class="leader-rank">${rankIcon}</div>
-                    <div class="leader-info">
-                        <span class="clickable-nick" data-nick="${user.name}">@${user.name}</span>
-                    </div>
-                    <div class="leader-stats">
-                        <i class="fas fa-heart"></i> ${user.likes} 
-                        <span style="font-size:14px; color:var(--secondary-text); margin-left:10px;">(${user.drawings} рис.)</span>
-                    </div>
+                    <div class="leader-info"><span class="clickable-nick" data-nick="${user.name}">@${user.name}</span></div>
+                    <div class="leader-stats"><i class="fas fa-heart"></i> ${user.likes} <span style="font-size:14px; color:var(--secondary-text); margin-left:10px;">(${user.drawings} рис.)</span></div>
                 </li>
             `;
         });
     }
 
-    // --- ПРОФИЛЬ ---
+    // Профиль
     function showProfile(nickname) {
         currentViewedProfile = nickname;
         showScreen('profile');
@@ -164,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else userDrawings.forEach(d => renderDrawingCard(d, gallery));
     }
 
-    // --- БАЗА И РЕНДЕР КАРТОЧЕК ---
+    // Рендер галереи
     function listenForDrawings() {
         onValue(ref(db, 'drawings'), (snapshot) => {
             allDrawings = [];
@@ -181,11 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const gallery = document.getElementById('gallery-container');
                 gallery.innerHTML = '';
                 allDrawings.forEach(d => renderDrawingCard(d, gallery));
-            } else if (screens.profile.classList.contains('active')) {
-                showProfile(currentViewedProfile);
-            } else if (screens.leaderboard.classList.contains('active')) {
-                generateLeaderboard();
-            }
+            } else if (screens.profile.classList.contains('active')) showProfile(currentViewedProfile);
+            else if (screens.leaderboard.classList.contains('active')) generateLeaderboard();
         });
     }
 
@@ -231,42 +210,48 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(card);
     }
 
-    // --- РЕДАКТОР: НЕОН И ОТМЕНА ---
+    // --- РЕДАКТОР ---
 
     function saveState() {
-        // Сохраняем текущее состояние холста в стек (максимум 15 шагов)
         undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
         if (undoStack.length > 15) undoStack.shift(); 
     }
 
     function undoLastAction() {
         if (undoStack.length > 1) {
-            undoStack.pop(); // Удаляем текущее состояние
-            ctx.putImageData(undoStack[undoStack.length - 1], 0, 0); // Восстанавливаем предыдущее
+            undoStack.pop(); 
+            ctx.putImageData(undoStack[undoStack.length - 1], 0, 0); 
         } else if (undoStack.length === 1) {
-            // Если остался только начальный пустой холст
             ctx.putImageData(undoStack[0], 0, 0);
         }
     }
 
     document.getElementById('undo-button').addEventListener('click', undoLastAction);
-    
-    // Поддержка Ctrl+Z
     document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.key === 'z' && screens.editor.classList.contains('active')) {
-            undoLastAction();
-        }
+        if (e.ctrlKey && e.key === 'z' && screens.editor.classList.contains('active')) undoLastAction();
     });
 
-    const neonBtn = document.getElementById('neon-toggle-btn');
-    neonBtn.addEventListener('click', () => {
-        isNeonMode = !isNeonMode;
-        neonBtn.classList.toggle('neon-on', isNeonMode);
+    // ЛОГИКА ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КИСТИ
+    const modeNormalBtn = document.getElementById('mode-normal');
+    const modeNeonBtn = document.getElementById('mode-neon');
+
+    modeNormalBtn.addEventListener('click', () => {
+        isNeonMode = false;
+        modeNormalBtn.classList.add('active');
+        modeNeonBtn.classList.remove('active');
     });
 
+    modeNeonBtn.addEventListener('click', () => {
+        isNeonMode = true;
+        modeNeonBtn.classList.add('active');
+        modeNormalBtn.classList.remove('active');
+    });
+
+    // Применение свечения
     function applyNeonEffect() {
         if (isNeonMode && currentTool !== 'eraser') {
-            ctx.shadowBlur = document.getElementById('line-width').value * 1.5;
+            const width = parseInt(document.getElementById('line-width').value);
+            ctx.shadowBlur = width * 2.5; // Сильное свечение
             ctx.shadowColor = document.getElementById('color-picker').value;
         } else {
             ctx.shadowBlur = 0;
@@ -280,8 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        undoStack = []; // Очищаем историю при открытии
-        saveState();    // Сохраняем пустой холст как первый шаг
+        undoStack = []; 
+        saveState();    
     }
 
     function startDrawing(e) {
@@ -304,7 +289,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ctx.strokeStyle = (currentTool === 'eraser') ? '#FFFFFF' : document.getElementById('color-picker').value;
         ctx.lineWidth = document.getElementById('line-width').value;
-        applyNeonEffect(); // Применяем свечение перед рисованием
+        
+        applyNeonEffect(); 
         
         if (['pencil', 'eraser'].includes(currentTool)) {
             ctx.beginPath();
@@ -324,8 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDrawing) {
             isDrawing = false; 
             ctx.beginPath();
-            ctx.shadowBlur = 0; // Сбрасываем тень, чтобы она не мешала другим инструментам
-            saveState(); // Сохраняем шаг после завершения линии
+            ctx.shadowBlur = 0; 
+            saveState(); 
         }
     }
 
@@ -337,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', setupCanvas);
 
     document.querySelectorAll('.tool-btn').forEach(btn => {
-        if(btn.id === 'undo-button' || btn.id === 'neon-toggle-btn') return;
+        if(btn.id === 'undo-button') return;
         btn.addEventListener('click', () => {
             document.querySelector('.tool-btn.active')?.classList.remove('active');
             btn.classList.add('active'); currentTool = btn.dataset.tool;
@@ -347,10 +333,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('fill-canvas-btn').addEventListener('click', () => { 
         ctx.fillStyle = document.getElementById('color-picker').value; 
         ctx.fillRect(0, 0, canvas.width, canvas.height); 
-        saveState(); // Сохраняем заливку в историю
+        saveState(); 
     });
 
-    // --- ПУБЛИКАЦИЯ ---
+    // Публикация
     publishBtn.addEventListener('click', async () => {
         publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         const imageURL = canvas.toDataURL('image/png'); 
@@ -366,4 +352,4 @@ document.addEventListener('DOMContentLoaded', () => {
         publishBtn.disabled = false; publishBtn.innerHTML = '<i class="fas fa-upload"></i> Готово';
     });
 });
-        
+                                                                   
