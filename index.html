@@ -54,16 +54,14 @@
         <main id="profile-gallery-container" class="gallery-grid"></main>
     </div>
 
-    <!-- ЭКРАН ЗАЛА СЛАВЫ (НОВОЕ) -->
+    <!-- ЭКРАН ЗАЛА СЛАВЫ -->
     <div id="leaderboard-screen" class="screen">
         <header class="top-bar">
             <button class="icon-button back-to-main"><i class="fas fa-arrow-left"></i> Назад</button>
         </header>
         <h2 class="section-title" style="text-align: center; color: var(--accent-neon); font-size: 32px; border-bottom: none;"><i class="fas fa-crown" style="color: gold;"></i> Зал Славы (Топ-10)</h2>
         <div class="leaderboard-container">
-            <ul id="leaderboard-list">
-                <!-- Список будет генерироваться через JS -->
-            </ul>
+            <ul id="leaderboard-list"></ul>
         </div>
     </div>
 
@@ -73,8 +71,14 @@
             <div class="toolbar">
                 <div class="tool-group">
                     <button class="tool-btn" id="undo-button" title="Отменить (Ctrl+Z)"><i class="fas fa-undo"></i></button>
-                    <button class="tool-btn" id="neon-toggle-btn" title="Включить Неон!"><i class="fas fa-magic"></i></button>
                 </div>
+                
+                <!-- НОВЫЙ ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА КИСТИ -->
+                <div class="tool-group brush-modes">
+                    <button class="mode-btn active" id="mode-normal">Обычная</button>
+                    <button class="mode-btn" id="mode-neon">Неон ✨</button>
+                </div>
+
                 <div class="tool-group">
                     <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
                     <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
