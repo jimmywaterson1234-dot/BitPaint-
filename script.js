@@ -1,338 +1,96 @@
-// Импортируем нужные функции из новой модульной версии Firebase v12
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+:root {
+    --bg-color: #0b0b14;
+    --primary-neon: #8a2be2;
+    --highlight-neon: #b967ff;
+    --accent-neon: #c084fc;
+    --text-color: #ffffff;
+    --secondary-text: #e0cffc;
+    --card-bg: #1a1a2e;
+    --border-color: #3a2c5c;
+}
 
-// Ваша конфигурация, которую вы прислали
-const firebaseConfig = {
-    apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
-    authDomain: "bitpaint-f7dbd.firebaseapp.com",
-    databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com",
-    projectId: "bitpaint-f7dbd",
-    storageBucket: "bitpaint-f7dbd.firebasestorage.app",
-    messagingSenderId: "193627137592",
-    appId: "1:193627137592:web:4f3835e21c0adf024468cd",
-    measurementId: "G-2JR3GPQ60R"
-};
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
 
-// Инициализируем Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+.screen { display: none; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; width: 100%; animation: fadeIn 0.4s ease-in-out; }
+.screen.active { display: flex; }
 
-// Ждем загрузки DOM
-document.addEventListener('DOMContentLoaded', () => {
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-    // --- Элементы DOM ---
-    const loginScreen = document.getElementById('login-screen');
-    const mainScreen = document.getElementById('main-screen');
-    const editorScreen = document.getElementById('editor-screen');
+/* Вход */
+#login-screen { justify-content: center; }
+.login-container { text-align: center; background: var(--card-bg); padding: 40px; border-radius: 15px; box-shadow: 0 0 25px rgba(138, 43, 226, 0.4); border: 1px solid var(--primary-neon); }
+.login-container h1 { color: var(--accent-neon); text-shadow: 0 0 10px var(--primary-neon); }
+#nickname-input { width: 80%; padding: 12px; margin: 20px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-size: 16px; transition: all 0.3s; }
+#nickname-input:focus { outline: none; border-color: var(--primary-neon); box-shadow: 0 0 15px var(--primary-neon); }
+.error-message { color: #ff4d4d; height: 20px; }
 
-    const nicknameInput = document.getElementById('nickname-input');
-    const loginButton = document.getElementById('login-button');
-    const nicknameError = document.getElementById('nickname-error');
-    
-    const currentUserNickname = document.getElementById('current-user-nickname');
-    const drawButton = document.getElementById('draw-button');
-    const galleryContainer = document.getElementById('gallery-container');
+/* Кнопки */
+button { background: transparent; border: 2px solid var(--primary-neon); color: var(--secondary-text); padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; text-shadow: 0 0 5px var(--primary-neon); }
+button:hover { background: var(--primary-neon); color: var(--text-color); transform: scale(1.05); box-shadow: 0 0 20px var(--primary-neon); }
+.icon-button { border: none; box-shadow: none; text-shadow: none; padding: 10px; }
+.icon-button:hover { background: transparent; color: var(--highlight-neon); transform: translateX(-5px); box-shadow: none; }
 
-    const canvas = document.getElementById('paint-canvas');
-    const ctx = canvas.getContext('2d');
-    
-    const toolBtns = document.querySelectorAll('.tool-btn');
-    const colorPicker = document.getElementById('color-picker');
-    const lineWidthSlider = document.getElementById('line-width');
-    const lineWidthValue = document.getElementById('line-width-value');
-    const fillCanvasBtn = document.getElementById('fill-canvas-btn');
-    const publishButton = document.getElementById('publish-button');
-    const backToGalleryButton = document.getElementById('back-to-gallery-button');
+/* Хедер */
+header { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; background: var(--card-bg); box-shadow: 0 2px 15px rgba(138, 43, 226, 0.2); box-sizing: border-box;}
+.logo { font-size: 24px; font-weight: bold; color: var(--accent-neon); text-shadow: 0 0 10px var(--primary-neon); }
+.user-info { display: flex; align-items: center; gap: 20px; }
 
-    // --- Переменные состояния ---
-    let currentUser = localStorage.getItem('bitpaint_currentUser'); 
-    let isDrawing = false;
-    let currentTool = 'pencil';
-    let lastX, lastY, startX, startY;
-    let snapshotImg;
+/* Кликабельные ники */
+.clickable-nick { font-weight: bold; color: var(--accent-neon); cursor: pointer; transition: color 0.3s, text-shadow 0.3s; }
+.clickable-nick:hover { color: var(--text-color); text-shadow: 0 0 10px var(--highlight-neon); text-decoration: underline; }
+.current-user-nick { font-size: 18px; border-bottom: 1px dashed var(--primary-neon); }
 
-    // --- Логика входа ---
-    if (currentUser) {
-        showScreen('main');
-    } else {
-        showScreen('login');
+/* ПРОФИЛЬ (Новое) */
+.profile-top-bar { justify-content: flex-start; background: transparent; box-shadow: none; }
+.profile-header-card { display: flex; align-items: center; gap: 30px; background: var(--card-bg); padding: 30px; width: 90%; max-width: 800px; border-radius: 15px; border: 1px solid var(--primary-neon); box-shadow: 0 0 20px rgba(138, 43, 226, 0.3); margin-top: 10px; flex-wrap: wrap;}
+.profile-avatar-container img { width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--highlight-neon); box-shadow: 0 0 15px var(--primary-neon); object-fit: cover; background: var(--bg-color); }
+.profile-info h2 { margin: 0 0 10px 0; color: var(--text-color); font-size: 32px; text-shadow: 0 0 10px var(--primary-neon); }
+.profile-stats { display: flex; gap: 20px; color: var(--secondary-text); font-size: 16px; }
+.profile-stats i { color: var(--highlight-neon); }
+#edit-avatar-button { margin-left: auto; background: var(--bg-color); }
+.profile-gallery-title { width: 90%; max-width: 800px; margin-top: 40px; color: var(--secondary-text); text-align: left; font-size: 24px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
+
+/* Галерея */
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; padding: 30px; width: 100%; max-width: 1200px; box-sizing: border-box; }
+.drawing-card { background: var(--card-bg); border-radius: 10px; border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5); transition: transform 0.3s; }
+.drawing-card:hover { transform: translateY(-5px); box-shadow: 0 0 20px rgba(138, 43, 226, 0.4); border-color: var(--primary-neon); }
+.drawing-card img { width: 100%; height: auto; background-color: white; aspect-ratio: 16/9; object-fit: contain; }
+.card-info, .card-comments-section { padding: 15px; }
+.card-info { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+.like-section { display: flex; align-items: center; gap: 8px; }
+.like-btn { background: none; border: none; color: var(--secondary-text); font-size: 20px; cursor: pointer; padding: 0; box-shadow: none; text-shadow: none; transition: transform 0.2s; }
+.like-btn:hover { transform: scale(1.3); background: none; }
+.like-btn.liked { color: #ff3366; text-shadow: 0 0 10px #ff3366; }
+.comments-list { max-height: 120px; overflow-y: auto; margin-bottom: 10px; font-size: 14px; }
+.comment { margin-bottom: 5px; }
+.comment-input-form { display: flex; gap: 10px; }
+.comment-input { flex-grow: 1; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 5px; padding: 8px; color: white; }
+.comment-input-form button { padding: 8px 15px; font-size: 14px; }
+
+/* Редактор */
+#editor-screen { height: 100vh; overflow: hidden; }
+.editor-container { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background-color: var(--card-bg); align-items: center; border-bottom: 1px solid var(--primary-neon); }
+.tool-group { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: #0b0b14; border-radius: 8px; }
+.right-align { margin-left: auto; background: transparent; }
+.tool-btn { padding: 8px; font-size: 18px; width: 40px; height: 40px; border: 2px solid transparent; }
+.tool-btn.active { border-color: var(--primary-neon); box-shadow: 0 0 10px var(--primary-neon); }
+#color-picker { appearance: none; width: 30px; height: 30px; background: transparent; border: none; cursor: pointer; }
+#color-picker::-webkit-color-swatch { border-radius: 50%; border: 2px solid var(--secondary-text); }
+.color-label, .width-label { color: var(--secondary-text); font-size: 18px; cursor: pointer; }
+#paint-canvas { background-color: white; flex-grow: 1; cursor: crosshair; touch-action: none; }
+
+/* Адаптация для мобилок */
+@media (max-width: 768px) {
+    .profile-header-card { flex-direction: column; text-align: center; padding: 20px; }
+    #edit-avatar-button { margin-left: 0; width: 100%; }
+    .toolbar { justify-content: center; overflow-y: auto; max-height: 150px;}
+    .right-align { margin-left: 0; }
     }
-
-    loginButton.addEventListener('click', async () => {
-        const nickname = nicknameInput.value.trim();
-        if (!nickname) {
-            nicknameError.textContent = 'Ник не может быть пустым.';
-            return;
-        }
-
-        const userRef = ref(db, 'users/' + nickname);
-        
-        try {
-            const snapshot = await get(userRef);
-            if (snapshot.exists() && localStorage.getItem('bitpaint_currentUser') !== nickname) {
-                 nicknameError.textContent = 'Этот ник уже кем-то занят.';
-            } else {
-                 await set(userRef, true); // Сохраняем в БД
-                 currentUser = nickname;
-                 localStorage.setItem('bitpaint_currentUser', currentUser);
-                 showScreen('main');
-            }
-        } catch (error) {
-            console.error("Ошибка при входе:", error);
-            nicknameError.textContent = 'Ошибка подключения к базе.';
-        }
-    });
-
-    drawButton.addEventListener('click', () => showScreen('editor'));
-    backToGalleryButton.addEventListener('click', () => showScreen('main'));
-
-    function showScreen(screenName) {
-        loginScreen.classList.remove('active');
-        mainScreen.classList.remove('active');
-        editorScreen.classList.remove('active');
-
-        if (screenName === 'login') {
-            loginScreen.classList.add('active');
-        } else if (screenName === 'main') {
-            currentUserNickname.textContent = currentUser;
-            mainScreen.classList.add('active');
-            listenForDrawings(); // Запускаем синхронизацию галереи
-        } else if (screenName === 'editor') {
-            editorScreen.classList.add('active');
-            setTimeout(setupCanvas, 50); 
-        }
-    }
-
-    // --- МАГИЯ РЕАЛЬНОГО ВРЕМЕНИ ---
-    function listenForDrawings() {
-        const drawingsRef = ref(db, 'drawings');
-        
-        // onValue автоматически срабатывает при ЛЮБОМ изменении в базе
-        onValue(drawingsRef, (snapshot) => {
-            galleryContainer.innerHTML = ''; 
-            
-            const drawings = [];
-            snapshot.forEach((childSnapshot) => {
-                const drawing = childSnapshot.val();
-                drawing.id = childSnapshot.key;
-                
-                drawing.likesList = drawing.likes ? Object.keys(drawing.likes) : [];
-                drawing.commentsList = drawing.comments ? Object.values(drawing.comments) : [];
-                
-                drawings.push(drawing);
-            });
-
-            // Сортируем: новые сверху
-            drawings.sort((a, b) => b.timestamp - a.timestamp);
-            drawings.forEach(renderDrawingCard);
-            addCardEventListeners();
-        });
-    }
-
-    function renderDrawingCard(drawing) {
-        const card = document.createElement('div');
-        card.className = 'drawing-card';
-        card.dataset.id = drawing.id;
-        
-        const isLiked = drawing.likesList.includes(currentUser);
-
-        card.innerHTML = `
-            <img src="${drawing.image}" alt="Рисунок от ${drawing.author}">
-            <div class="card-info">
-                <span class="author-nick">@${drawing.author}</span>
-                <div class="like-section">
-                    <button class="like-btn ${isLiked ? 'liked' : ''}">
-                        <i class="fas fa-heart"></i>
-                    </button>
-                    <span class="like-count">${drawing.likesList.length}</span>
-                </div>
-            </div>
-            <div class="card-comments-section">
-                <div class="comments-list">
-                    ${drawing.commentsList.map(c => `<div class="comment"><strong>@${c.author}:</strong> ${c.text}</div>`).join('')}
-                </div>
-                <form class="comment-input-form">
-                    <input type="text" class="comment-input" placeholder="Добавить комментарий...">
-                    <button type="submit">Отправить</button>
-                </form>
-            </div>
-        `;
-        galleryContainer.appendChild(card);
-    }
-
-    function addCardEventListeners() {
-        document.querySelectorAll('.drawing-card').forEach(card => {
-            const drawingId = card.dataset.id;
-            
-            // Обработка клика по лайку
-            card.querySelector('.like-btn').addEventListener('click', async () => {
-                const likeRef = ref(db, `drawings/${drawingId}/likes/${currentUser}`);
-                const snapshot = await get(likeRef);
-                if (snapshot.exists()) {
-                    await remove(likeRef); // Убираем лайк
-                } else {
-                    await set(likeRef, true); // Ставим лайк
-                }
-            });
-
-            // Обработка отправки комментария
-            card.querySelector('.comment-input-form').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const input = e.currentTarget.querySelector('.comment-input');
-                const commentText = input.value.trim();
-                
-                if (commentText) {
-                    const commentsRef = ref(db, `drawings/${drawingId}/comments`);
-                    await push(commentsRef, {
-                        author: currentUser,
-                        text: commentText,
-                        timestamp: serverTimestamp()
-                    });
-                    input.value = '';
-                }
-            });
-        });
-    }
-
-    // --- ПУБЛИКАЦИЯ В БАЗУ ---
-    publishButton.addEventListener('click', async () => {
-        publishButton.disabled = true;
-        publishButton.textContent = 'Публикация...';
-
-        const imageURL = canvas.toDataURL('image/png'); 
-        const drawingsRef = ref(db, 'drawings');
-
-        try {
-            await push(drawingsRef, {
-                author: currentUser,
-                image: imageURL,
-                timestamp: serverTimestamp()
-            });
-            publishButton.disabled = false;
-            publishButton.innerHTML = '<i class="fas fa-upload"></i> Опубликовать';
-            alert('Рисунок опубликован!');
-            showScreen('main');
-        } catch (error) {
-            console.error("Ошибка публикации:", error);
-            alert("Произошла ошибка при публикации.");
-            publishButton.disabled = false;
-        }
-    });
-
-    // --- ЛОГИКА РИСОВАНИЯ ---
-    function setupCanvas() {
-        const editorContainer = document.querySelector('.editor-container');
-        canvas.width = editorContainer.offsetWidth;
-        canvas.height = editorContainer.offsetHeight - document.querySelector('.toolbar').offsetHeight;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = colorPicker.value;
-        ctx.lineWidth = lineWidthSlider.value;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-    }
-
-    function getCoords(e) {
-        const rect = canvas.getBoundingClientRect();
-        if (e.touches) { 
-            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-        }
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    }
-
-    function startDrawing(e) {
-        e.preventDefault();
-        isDrawing = true;
-        const coords = getCoords(e);
-        [lastX, lastY] = [coords.x, coords.y];
-        [startX, startY] = [coords.x, coords.y];
-        
-        snapshotImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        if (currentTool === 'text') {
-            const text = prompt("Введите текст:");
-            if (text) {
-                ctx.fillStyle = colorPicker.value;
-                ctx.font = `${lineWidthSlider.value * 2}px sans-serif`;
-                ctx.fillText(text, coords.x, coords.y);
-            }
-            isDrawing = false;
-        }
-    }
-
-    function draw(e) {
-        if (!isDrawing) return;
-        e.preventDefault();
-        
-        const coords = getCoords(e);
-        ctx.strokeStyle = (currentTool === 'eraser') ? '#FFFFFF' : colorPicker.value;
-        
-        if (['pencil', 'eraser'].includes(currentTool)) {
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(coords.x, coords.y);
-            ctx.stroke();
-            [lastX, lastY] = [coords.x, coords.y];
-        } else {
-            drawShape(coords.x, coords.y);
-        }
-    }
-    
-    function stopDrawing() {
-        if (!isDrawing) return;
-        isDrawing = false;
-        ctx.beginPath(); 
-    }
-
-    function drawShape(currentX, currentY) {
-        ctx.putImageData(snapshotImg, 0, 0); 
-        ctx.beginPath();
-        if (currentTool === 'line') {
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(currentX, currentY);
-        } else if (currentTool === 'rect') {
-            ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
-        } else if (currentTool === 'circle') {
-            let radius = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
-            ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-        }
-        ctx.stroke();
-    }
-    
-    // События холста
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseout', stopDrawing);
-
-    canvas.addEventListener('touchstart', startDrawing, { passive: false });
-    canvas.addEventListener('touchmove', draw, { passive: false });
-    canvas.addEventListener('touchend', stopDrawing);
-    window.addEventListener('resize', setupCanvas);
-
-    // Управление инструментами
-    toolBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelector('.tool-btn.active').classList.remove('active');
-            btn.classList.add('active');
-            currentTool = btn.dataset.tool;
-        });
-    });
-
-    lineWidthSlider.addEventListener('input', (e) => {
-        ctx.lineWidth = e.target.value;
-        lineWidthValue.textContent = e.target.value;
-    });
-
-    colorPicker.addEventListener('change', (e) => {
-        ctx.strokeStyle = e.target.value;
-        ctx.fillStyle = e.target.value;
-    });
-
-    fillCanvasBtn.addEventListener('click', () => {
-        ctx.fillStyle = colorPicker.value;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    });
-});
-            
