@@ -46,7 +46,7 @@
             <header class="app-header neon-card">
                 <button class="icon-btn" onclick="showScreen('main-screen')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 <h2 class="neon-text">Профиль</h2>
-                <div style="width: 40px;"></div> <!-- Spacer -->
+                <div style="width: 40px;"></div>
             </header>
             <div class="profile-info neon-card">
                 <div class="avatar-container">
@@ -86,16 +86,29 @@
                     <button class="tool-btn" data-tool="line" title="Линия"><i class="fa-solid fa-minus"></i></button>
                     <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="fa-regular fa-square"></i></button>
                     <button class="tool-btn" data-tool="circle" title="Круг"><i class="fa-regular fa-circle"></i></button>
-                    <button class="tool-btn" data-tool="fill" title="Заливка"><i class="fa-solid fa-fill-drip"></i></button>
+                    <button class="tool-btn" data-tool="fill" title="Заливка Холста"><i class="fa-solid fa-fill-drip"></i></button>
+                    <button class="tool-btn" data-tool="picker" title="Пипетка"><i class="fa-solid fa-eye-dropper"></i></button>
                 </div>
 
                 <div class="toolbar-group settings">
                     <input type="color" id="color-picker" value="#b967ff">
                     <input type="range" id="size-slider" min="1" max="50" value="5">
-                    <label class="neon-toggle">
+                    <label class="neon-toggle" style="margin-right:10px;">
                         <input type="checkbox" id="neon-mode" checked>
                         <span class="toggle-label">Неон ✨</span>
                     </label>
+                    <div style="border-left: 1px solid var(--primary); padding-left: 10px; display:flex; gap:10px; align-items:center;">
+                        <label class="neon-toggle">
+                            <input type="checkbox" id="shape-fill">
+                            <span class="toggle-label">Заливка фигур</span>
+                        </label>
+                        <select id="texture-select" class="neon-select">
+                            <option value="none">Без текстуры</option>
+                            <option value="brick">🧱 Кирпичи</option>
+                            <option value="wood">🪵 Дерево</option>
+                            <option value="stone">🪨 Камень</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="toolbar-group">
@@ -111,4 +124,5 @@
     <!-- JS -->
     <script src="app.js"></script>
 </body>
-</html>
+                                                               </html>
+                                                               
