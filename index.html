@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>BitPaint - Рисуй и Делись</title>
-    
-    <!-- Подключение стилей и шрифтов -->
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -28,13 +26,37 @@
         <header>
             <div class="logo">BitPaint</div>
             <div class="user-info">
-                <span id="current-user-nickname"></span>
+                <span id="current-user-nickname" class="clickable-nick current-user-nick" title="Мой профиль"></span>
                 <button id="draw-button">
                     <i class="fas fa-pencil-alt"></i> Рисовать
                 </button>
             </div>
         </header>
         <main id="gallery-container" class="gallery-grid"></main>
+    </div>
+
+    <!-- ЭКРАН ПРОФИЛЯ (НОВОЕ) -->
+    <div id="profile-screen" class="screen">
+        <header class="profile-top-bar">
+            <button id="back-from-profile-button" class="icon-button"><i class="fas fa-arrow-left"></i> В ленту</button>
+        </header>
+        
+        <div class="profile-header-card">
+            <div class="profile-avatar-container">
+                <img id="profile-avatar-img" src="" alt="Аватар">
+            </div>
+            <div class="profile-info">
+                <h2 id="profile-nickname">@Nick</h2>
+                <div class="profile-stats">
+                    <p><i class="fas fa-heart"></i> Лайков: <span id="profile-total-likes">0</span></p>
+                    <p><i class="fas fa-image"></i> Рисунков: <span id="profile-total-drawings">0</span></p>
+                </div>
+            </div>
+            <button id="edit-avatar-button"><i class="fas fa-user-edit"></i> Нарисовать аватар</button>
+        </div>
+        
+        <h3 class="profile-gallery-title">Галерея пользователя</h3>
+        <main id="profile-gallery-container" class="gallery-grid"></main>
     </div>
 
     <!-- Экран рисования (Редактор) -->
@@ -45,11 +67,8 @@
                     <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
                     <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
                     <button class="tool-btn" data-tool="line" title="Линия"><i class="fas fa-slash"></i></button>
-                </div>
-                 <div class="tool-group">
                     <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="far fa-square"></i></button>
                     <button class="tool-btn" data-tool="circle" title="Круг"><i class="far fa-circle"></i></button>
-                    <button class="tool-btn" data-tool="text" title="Текст"><i class="fas fa-font"></i></button>
                 </div>
                 <div class="tool-group">
                     <label for="color-picker" class="color-label" title="Выбор цвета">
@@ -59,23 +78,18 @@
                     <button class="tool-btn" id="fill-canvas-btn" title="Заливка"><i class="fas fa-fill-drip"></i></button>
                 </div>
                 <div class="tool-group">
-                     <label for="line-width" class="width-label" title="Толщина">
-                        <i class="fas fa-arrows-alt-h"></i>
-                    </label>
+                     <label for="line-width" class="width-label" title="Толщина"><i class="fas fa-arrows-alt-h"></i></label>
                     <input type="range" id="line-width" min="1" max="50" value="5">
-                    <span id="line-width-value">5</span>
                 </div>
-                <div class="tool-group">
-                     <button id="publish-button"><i class="fas fa-upload"></i> Опубликовать</button>
-                     <button id="back-to-gallery-button"><i class="fas fa-arrow-left"></i> В галерею</button>
+                <div class="tool-group right-align">
+                     <button id="publish-button"><i class="fas fa-upload"></i> Готово</button>
+                     <button id="back-to-gallery-button"><i class="fas fa-times"></i> Отмена</button>
                 </div>
             </div>
             <canvas id="paint-canvas"></canvas>
         </div>
     </div>
     
-    <!-- ВАЖНО: Подключение логики как модуля (специально для новой версии Firebase) -->
     <script type="module" src="script.js"></script>
-
 </body>
 </html>
