@@ -29,17 +29,13 @@ button:hover { background: var(--primary-neon); color: var(--text-color); transf
 header { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; background: var(--card-bg); box-shadow: 0 2px 15px rgba(138, 43, 226, 0.2); box-sizing: border-box;}
 .logo { font-size: 24px; font-weight: bold; color: var(--accent-neon); text-shadow: 0 0 10px var(--primary-neon); }
 .user-info { display: flex; align-items: center; gap: 15px; flex-wrap: wrap;}
-
-/* Кликабельные ники */
 .clickable-nick { font-weight: bold; color: var(--accent-neon); cursor: pointer; transition: color 0.3s, text-shadow 0.3s; }
 .clickable-nick:hover { color: var(--text-color); text-shadow: 0 0 10px var(--highlight-neon); text-decoration: underline; }
 .current-user-nick { font-size: 18px; border-bottom: 1px dashed var(--primary-neon); }
 
-/* Общие элементы (Профиль и Топ) */
+/* Профиль и Топ */
 .top-bar { justify-content: flex-start; background: transparent; box-shadow: none; }
 .section-title { width: 90%; max-width: 800px; margin-top: 20px; color: var(--secondary-text); text-align: left; font-size: 24px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
-
-/* Профиль */
 .profile-header-card { display: flex; align-items: center; gap: 30px; background: var(--card-bg); padding: 30px; width: 90%; max-width: 800px; border-radius: 15px; border: 1px solid var(--primary-neon); box-shadow: 0 0 20px rgba(138, 43, 226, 0.3); flex-wrap: wrap;}
 .profile-avatar-container img { width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--highlight-neon); box-shadow: 0 0 15px var(--primary-neon); object-fit: cover; background: var(--bg-color); }
 .profile-info h2 { margin: 0 0 10px 0; color: var(--text-color); font-size: 32px; text-shadow: 0 0 10px var(--primary-neon); }
@@ -47,7 +43,7 @@ header { width: 100%; display: flex; justify-content: space-between; align-items
 .profile-stats i { color: var(--highlight-neon); }
 #edit-avatar-button { margin-left: auto; background: var(--bg-color); }
 
-/* ЗАЛ СЛАВЫ (Новое) */
+/* Зал славы */
 .leaderboard-container { width: 90%; max-width: 600px; margin-top: 20px; }
 #leaderboard-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 15px; }
 .leader-item { display: flex; align-items: center; justify-content: space-between; background: var(--card-bg); padding: 15px 25px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 18px; transition: transform 0.3s; }
@@ -55,7 +51,6 @@ header { width: 100%; display: flex; justify-content: space-between; align-items
 .leader-rank { font-weight: bold; width: 40px; font-size: 20px; }
 .leader-info { flex-grow: 1; display: flex; align-items: center; gap: 15px; }
 .leader-stats { font-weight: bold; color: var(--highlight-neon); text-shadow: 0 0 5px var(--highlight-neon); }
-/* Цвета для ТОП-3 */
 .rank-1 { border-color: gold; box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); }
 .rank-1 .leader-rank { color: gold; text-shadow: 0 0 10px gold; }
 .rank-2 { border-color: silver; box-shadow: 0 0 15px rgba(192, 192, 192, 0.4); }
@@ -87,20 +82,25 @@ header { width: 100%; display: flex; justify-content: space-between; align-items
 .right-align { margin-left: auto; background: transparent; }
 .tool-btn { padding: 8px; font-size: 18px; width: 40px; height: 40px; border: 2px solid transparent; }
 .tool-btn.active { border-color: var(--primary-neon); box-shadow: 0 0 10px var(--primary-neon); }
-/* Анимация неоновой кнопки */
-#neon-toggle-btn.neon-on { background-color: var(--primary-neon); color: white; box-shadow: 0 0 15px var(--highlight-neon); animation: pulse 1.5s infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 10px var(--primary-neon); } 50% { box-shadow: 0 0 25px var(--highlight-neon); } 100% { box-shadow: 0 0 10px var(--primary-neon); } }
+
+/* Стили переключателя режимов кисти */
+.brush-modes { display: flex; background: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color); padding: 0; overflow: hidden; }
+.mode-btn { border: none; background: transparent; color: var(--secondary-text); padding: 8px 15px; font-size: 15px; cursor: pointer; border-radius: 0; box-shadow: none; text-shadow: none; transition: 0.3s; }
+.mode-btn:hover { transform: none; box-shadow: inset 0 0 10px rgba(138, 43, 226, 0.3); }
+.mode-btn.active { background: var(--primary-neon); color: white; text-shadow: 0 0 5px white; }
+#mode-neon.active { animation: pulse-text 1.5s infinite; background: linear-gradient(45deg, #8a2be2, #b967ff); }
+@keyframes pulse-text { 0% { box-shadow: inset 0 0 10px #b967ff; } 50% { box-shadow: inset 0 0 20px #c084fc; } 100% { box-shadow: inset 0 0 10px #b967ff; } }
 
 #color-picker { appearance: none; width: 30px; height: 30px; background: transparent; border: none; cursor: pointer; }
 #color-picker::-webkit-color-swatch { border-radius: 50%; border: 2px solid var(--secondary-text); }
 .color-label, .width-label { color: var(--secondary-text); font-size: 18px; cursor: pointer; }
 #paint-canvas { background-color: white; flex-grow: 1; cursor: crosshair; touch-action: none; }
 
-/* Адаптация */
 @media (max-width: 768px) {
     .profile-header-card { flex-direction: column; text-align: center; padding: 20px; }
     #edit-avatar-button { margin-left: 0; width: 100%; }
-    .toolbar { justify-content: center; overflow-y: auto; max-height: 150px;}
+    .toolbar { justify-content: center; overflow-y: auto; max-height: 180px;}
     .right-align { margin-left: 0; }
     .user-info { justify-content: center; width: 100%; margin-top: 10px;}
-    }
+                               }
+                                                                                                               
