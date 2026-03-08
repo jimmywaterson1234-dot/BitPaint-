@@ -1,6 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-
+// Конфигурация Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
     authDomain: "bitpaint-f7dbd.firebaseapp.com",
@@ -11,8 +9,9 @@ const firebaseConfig = {
     appId: "1:193627137592:web:4f3835e21c0adf024468cd"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+// Инициализация классическим методом (работает везде)
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -28,59 +27,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const nickInput = document.getElementById('nickname-input');
     const publishBtn = document.getElementById('publish-button');
     
-    // willReadFrequently нужен для алгоритма умной заливки, чтобы не тормозило
     const canvas = document.getElementById('paint-canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true }); 
 
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let allDrawings = []; 
     let currentViewedProfile = ''; 
-    let publishMode = 'drawing'; // 'drawing', 'avatar', 'edit'
+    let publishMode = 'drawing'; 
     let editingDrawingId = null; 
     let editingDrawingTitle = ""; 
 
-    // Переменные редактора
     let isDrawing = false;
     let currentTool = 'pencil';
     let isNeonMode = false;
     let undoStack = []; 
     let lastX, lastY, startX, startY, snapshotImg;
 
-    // Вход при загрузке
     if (currentUser) showScreen('main');
     else showScreen('login');
 
-    // --- БЕЗОПАСНЫЙ ВХОД (Без блокировок) ---
-    loginBtn.addEventListener('click', async () => {
+    // --- БЕЗОПАСНЫЙ ВХОД ---
+    loginBtn.addEventListener('click', () => {
         const nickname = nickInput.value.trim();
         if (!nickname) return;
         
         loginBtn.disabled = true;
-        loginBtn.textContent = 'Загрузка...';
+        loginBtn.textContent = 'Вход...';
 
-        try {
-            const userRef = ref(db, 'users/' + nickname);
-            const snapshot = await get(userRef);
-            
-            // Если аккаунта нет - создаем. Если есть - просто пускаем!
+        const userRef = db.ref('users/' + nickname);
+        userRef.once('value').then((snapshot) => {
             if (!snapshot.exists()) {
-                 await set(userRef, { joined: serverTimestamp(), avatar: '' });
+                 userRef.set({ joined: firebase.database.ServerValue.TIMESTAMP, avatar: '' });
             }
-            
             currentUser = nickname;
             localStorage.setItem('bitpaint_currentUser', currentUser);
             document.getElementById('nickname-error').textContent = '';
             showScreen('main');
-        } catch (error) {
+        }).catch((error) => {
             console.error(error);
-            document.getElementById('nickname-error').textContent = 'Ошибка подключения';
-        } finally {
+            document.getElementById('nickname-error').textContent = 'Ошибка сети';
+        }).finally(() => {
             loginBtn.disabled = false;
             loginBtn.textContent = 'Войти';
-        }
+        });
     });
 
-    // Навигация
     function showScreen(screenName) {
         Object.values(screens).forEach(s => s.classList.remove('active'));
         screens[screenName].classList.add('active');
@@ -120,14 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('profile-nickname').textContent = '@' + nickname;
         document.getElementById('edit-avatar-button').style.display = (nickname === currentUser) ? 'block' : 'none';
 
-        onValue(ref(db, 'users/' + nickname), (snapshot) => {
+        db.ref('users/' + nickname).once('value').then((snapshot) => {
             const data = snapshot.val();
             const defAvatar = `data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%231a1a2e' width='100' height='100'/%3E%3Ctext fill='%238a2be2' font-family='sans-serif' font-size='40' x='50' y='65' text-anchor='middle'%3E?%3C/text%3E%3C/svg%3E`;
             document.getElementById('profile-avatar-img').src = (data && data.avatar) ? data.avatar : defAvatar;
-        }, { onlyOnce: true });
+        });
 
         const userDrawings = allDrawings.filter(d => d.author === nickname);
-        document.getElementById('profile-total-likes').textContent = userDrawings.reduce((s, d) => s + d.likesList.length, 0);
+        document.getElementById('profile-total-likes').textContent = userDrawings.reduce((s, d) => s + (d.likesList ? d.likesList.length : 0), 0);
         document.getElementById('profile-total-drawings').textContent = userDrawings.length;
 
         const gallery = document.getElementById('profile-gallery-container');
@@ -142,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allDrawings.forEach(d => {
             if (!stats[d.author]) stats[d.author] = { likes: 0, drawings: 0 };
             stats[d.author].drawings++;
-            stats[d.author].likes += d.likesList.length;
+            stats[d.author].likes += (d.likesList ? d.likesList.length : 0);
         });
 
         const sortedUsers = Object.entries(stats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.likes - a.likes || b.drawings - a.drawings).slice(0, 10);
@@ -157,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ГАЛЕРЕЯ ---
     function listenForDrawings() {
-        onValue(ref(db, 'drawings'), (snapshot) => {
+        db.ref('drawings').on('value', (snapshot) => {
             allDrawings = [];
             snapshot.forEach((child) => {
                 const drawing = child.val();
@@ -184,7 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLiked = drawing.likesList.includes(currentUser);
         const title = drawing.title || "Без названия";
 
-        // Кнопка редактирования только для автора
         const editBtnHtml = drawing.author === currentUser 
             ? `<button class="edit-card-btn" data-id="${drawing.id}" title="Дорисовать"><i class="fas fa-edit"></i></button>` 
             : '';
@@ -217,7 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
-        // Логика дорисовывания (карандаш)
         const editBtn = card.querySelector('.edit-card-btn');
         if (editBtn) {
             editBtn.addEventListener('click', () => {
@@ -246,18 +235,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Лайки
-        card.querySelector('.like-btn').addEventListener('click', async () => {
-            const likeRef = ref(db, `drawings/${drawing.id}/likes/${currentUser}`);
-            const snap = await get(likeRef);
-            if (snap.exists()) await remove(likeRef); else await set(likeRef, true);
+        card.querySelector('.like-btn').addEventListener('click', () => {
+            const likeRef = db.ref(`drawings/${drawing.id}/likes/${currentUser}`);
+            likeRef.once('value').then((snap) => {
+                if (snap.exists()) likeRef.remove(); else likeRef.set(true);
+            });
         });
 
         // Комментарии
-        card.querySelector('.comment-input-form').addEventListener('submit', async (e) => {
+        card.querySelector('.comment-input-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const input = e.currentTarget.querySelector('.comment-input');
             if (input.value.trim()) {
-                await push(ref(db, `drawings/${drawing.id}/comments`), { author: currentUser, text: input.value.trim(), timestamp: serverTimestamp() });
+                db.ref(`drawings/${drawing.id}/comments`).push({ 
+                    author: currentUser, 
+                    text: input.value.trim(), 
+                    timestamp: firebase.database.ServerValue.TIMESTAMP 
+                });
                 input.value = '';
             }
         });
@@ -452,5 +446,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- ПУБЛИКАЦИЯ / ОБНОВЛЕНИЕ ---
-    publishBtn.addEventListener('click', async () => {
-        let finalTitle = 
+    publishBtn.addEventListener('click', () => {
+        let finalTitle = "";
+        
+        if (publishMode !== 'avatar') {
+            const userInput = prompt("Введите название рисунка:", publishMode === 'edit' ? editingDrawingTitle : "Мой шедевр");
+            if (userInput === null) return; 
+            finalTitle = userInput.trim() || "Без названия";
+        }
+
+        publishBtn.disabled = true; 
+        publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        const imageURL = canvas.toData
