@@ -69,18 +69,15 @@
     <div id="editor-screen" class="screen">
         <div class="editor-container">
             <div class="toolbar">
-                <!-- Отмена -->
                 <div class="tool-group">
                     <button class="tool-btn" id="undo-button" title="Отменить (Ctrl+Z)"><i class="fas fa-undo"></i></button>
                 </div>
                 
-                <!-- Неон -->
                 <div class="tool-group brush-modes">
                     <button class="mode-btn active" id="mode-normal">Обычная</button>
                     <button class="mode-btn" id="mode-neon">Неон ✨</button>
                 </div>
 
-                <!-- Инструменты -->
                 <div class="tool-group">
                     <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
                     <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
@@ -89,8 +86,6 @@
                     <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="far fa-square"></i></button>
                     <button class="tool-btn" data-tool="circle" title="Круг"><i class="far fa-circle"></i></button>
                 </div>
-                
-                <!-- Цвет и толщина -->
                 <div class="tool-group">
                     <label for="color-picker" class="color-label" title="Выбор цвета">
                         <i class="fas fa-palette"></i>
@@ -101,8 +96,6 @@
                      <label for="line-width" class="width-label" title="Толщина"><i class="fas fa-arrows-alt-h"></i></label>
                     <input type="range" id="line-width" min="1" max="50" value="5">
                 </div>
-                
-                <!-- Сохранение -->
                 <div class="tool-group right-align">
                      <button id="publish-button"><i class="fas fa-upload"></i> Сохранить</button>
                      <button id="back-to-gallery-button"><i class="fas fa-times"></i></button>
@@ -112,9 +105,11 @@
         </div>
     </div>
     
-    <script type="module" src="script.js"></script>
-</body><button onclick="localStorage.clear(); window.location.reload(true);" style="position: fixed; top: 10px; left: 10px; z-index: 9999; background: red; color: white; border: none; padding: 15px; border-radius: 10px; font-weight: bold; box-shadow: 0 0 10px black;">
-    🚨 СБРОСИТЬ КЭШ
-</button>
+    <!-- ПОДКЛЮЧАЕМ FIREBASE КЛАССИЧЕСКИМ СПОСОБОМ -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
     
+    <!-- ПОДКЛЮЧАЕМ ВАШ СКРИПТ (Без type="module") -->
+    <script src="script.js"></script>
+</body>
 </html>
