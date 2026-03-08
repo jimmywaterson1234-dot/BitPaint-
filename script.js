@@ -28,43 +28,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const nickInput = document.getElementById('nickname-input');
     const publishBtn = document.getElementById('publish-button');
     
+    // willReadFrequently нужен для алгоритма умной заливки, чтобы не тормозило
     const canvas = document.getElementById('paint-canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true }); // Оптимизация для заливки
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }); 
 
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let allDrawings = []; 
     let currentViewedProfile = ''; 
-    let publishMode = 'drawing'; 
+    let publishMode = 'drawing'; // 'drawing', 'avatar', 'edit'
     let editingDrawingId = null; 
     let editingDrawingTitle = ""; 
 
+    // Переменные редактора
     let isDrawing = false;
     let currentTool = 'pencil';
     let isNeonMode = false;
     let undoStack = []; 
     let lastX, lastY, startX, startY, snapshotImg;
 
-    if (currentUser) {
-        showScreen('main');
-    } else {
-        showScreen('login');
-    }
+    // Вход при загрузке
+    if (currentUser) showScreen('main');
+    else showScreen('login');
 
-    // ЛОГИКА ВХОДА - ПРОСТАЯ И НАДЕЖНАЯ (Без блокировок)
+    // --- БЕЗОПАСНЫЙ ВХОД (Без блокировок) ---
     loginBtn.addEventListener('click', async () => {
         const nickname = nickInput.value.trim();
-        if (!nickname) {
-            document.getElementById('nickname-error').textContent = 'Введите ник';
-            return;
-        }
+        if (!nickname) return;
         
         loginBtn.disabled = true;
-        loginBtn.textContent = 'Вход...';
+        loginBtn.textContent = 'Загрузка...';
 
         try {
             const userRef = ref(db, 'users/' + nickname);
             const snapshot = await get(userRef);
             
+            // Если аккаунта нет - создаем. Если есть - просто пускаем!
             if (!snapshot.exists()) {
                  await set(userRef, { joined: serverTimestamp(), avatar: '' });
             }
@@ -74,14 +72,15 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('nickname-error').textContent = '';
             showScreen('main');
         } catch (error) {
-            console.error("Ошибка Firebase:", error);
-            document.getElementById('nickname-error').textContent = 'Ошибка сети. Проверьте интернет.';
+            console.error(error);
+            document.getElementById('nickname-error').textContent = 'Ошибка подключения';
         } finally {
             loginBtn.disabled = false;
             loginBtn.textContent = 'Войти';
         }
     });
 
+    // Навигация
     function showScreen(screenName) {
         Object.values(screens).forEach(s => s.classList.remove('active'));
         screens[screenName].classList.add('active');
@@ -114,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- ПРОФИЛЬ ---
     function showProfile(nickname) {
         currentViewedProfile = nickname;
         showScreen('profile');
@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else userDrawings.forEach(d => renderDrawingCard(d, gallery));
     }
 
+    // --- ЗАЛ СЛАВЫ ---
     function generateLeaderboard() {
         const stats = {};
         allDrawings.forEach(d => {
@@ -154,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- ГАЛЕРЕЯ ---
     function listenForDrawings() {
         onValue(ref(db, 'drawings'), (snapshot) => {
             allDrawings = [];
@@ -170,7 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const gallery = document.getElementById('gallery-container');
                 gallery.innerHTML = '';
                 allDrawings.forEach(d => renderDrawingCard(d, gallery));
-            } else if (screens.profile.classList.contains('active')) showProfile(currentViewedProfile);
+            } else if (screens.profile.classList.contains('active')) {
+                showProfile(currentViewedProfile);
+            }
         });
     }
 
@@ -180,8 +184,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLiked = drawing.likesList.includes(currentUser);
         const title = drawing.title || "Без названия";
 
+        // Кнопка редактирования только для автора
         const editBtnHtml = drawing.author === currentUser 
-            ? `<button class="edit-card-btn" data-id="${drawing.id}" title="Дорисовать/Изменить"><i class="fas fa-edit"></i></button>` 
+            ? `<button class="edit-card-btn" data-id="${drawing.id}" title="Дорисовать"><i class="fas fa-edit"></i></button>` 
             : '';
 
         card.innerHTML = `
@@ -212,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        // Логика дорисовывания (карандаш)
         const editBtn = card.querySelector('.edit-card-btn');
         if (editBtn) {
             editBtn.addEventListener('click', () => {
@@ -228,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 canvas.height = container.offsetHeight - document.querySelector('.toolbar').offsetHeight;
                 
                 const img = new Image();
-                img.crossOrigin = "Anonymous";
                 img.onload = () => {
                     ctx.fillStyle = '#FFFFFF';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -240,12 +245,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Лайки
         card.querySelector('.like-btn').addEventListener('click', async () => {
             const likeRef = ref(db, `drawings/${drawing.id}/likes/${currentUser}`);
             const snap = await get(likeRef);
             if (snap.exists()) await remove(likeRef); else await set(likeRef, true);
         });
 
+        // Комментарии
         card.querySelector('.comment-input-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const input = e.currentTarget.querySelector('.comment-input');
@@ -256,6 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         container.appendChild(card);
     }
+
+    // --- РЕДАКТОР И РИСОВАНИЕ ---
 
     function saveState() {
         undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
@@ -310,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();    
     }
 
-    // --- ЗАЛИВКА ---
+    // --- УМНАЯ ЗАЛИВКА ---
     function hexToRgba(hex) {
         let r = parseInt(hex.slice(1, 3), 16);
         let g = parseInt(hex.slice(3, 5), 16);
@@ -442,11 +451,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Публикация / Обновление
+    // --- ПУБЛИКАЦИЯ / ОБНОВЛЕНИЕ ---
     publishBtn.addEventListener('click', async () => {
-        let finalTitle = "";
-        
-        if (publishMode !== 'avatar') {
-            const userInput = prompt("Введите название рисунка:", publishMode === 'edit' ? editingDrawingTitle : "Мой шедевр");
-            if (userInput === null) return; 
-            finalTitle = userInput.trim() || "Без названи
+        let finalTitle = 
