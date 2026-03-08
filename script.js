@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp, update } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
@@ -35,7 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUser = localStorage.getItem('bitpaint_currentUser'); 
     let allDrawings = []; 
     let currentViewedProfile = ''; 
-    let publishMode = 'drawing'; 
+    let publishMode = 'drawing'; // 'drawing', 'avatar', или 'edit'
+    let editingDrawingId = null; // Храним ID рисунка, если мы его редактируем
+    let editingDrawingTitle = ""; // Храним старое название
 
     // Редактор
     let isDrawing = false;
@@ -74,14 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
             publishMode = 'drawing';
             listenForDrawings(); 
         } else if (screenName === 'editor') {
-            setTimeout(setupCanvas, 50); 
+            // Если не режим редактирования старого рисунка, то создаем чистый холст
+            if (publishMode !== 'edit') setTimeout(setupCanvas, 50); 
         } else if (screenName === 'leaderboard') {
             generateLeaderboard();
         }
     }
 
     document.getElementById('draw-button').addEventListener('click', () => { publishMode = 'drawing'; showScreen('editor'); });
-    document.getElementById('back-to-gallery-button').addEventListener('click', () => { if(publishMode === 'avatar') showProfile(currentUser); else showScreen('main'); });
+    document.getElementById('back-to-gallery-button').addEventListener('click', () => { 
+        if(publishMode === 'avatar') showProfile(currentUser); 
+        else showScreen('main'); 
+    });
     document.getElementById('edit-avatar-button').addEventListener('click', () => { publishMode = 'avatar'; showScreen('editor'); });
     document.getElementById('leaderboard-button').addEventListener('click', () => showScreen('leaderboard'));
     document.querySelectorAll('.back-to-main').forEach(btn => btn.addEventListener('click', () => showScreen('main')));
@@ -92,36 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (nick) showProfile(nick);
         }
     });
-
-    // Топ-10
-    function generateLeaderboard() {
-        const stats = {};
-        allDrawings.forEach(d => {
-            if (!stats[d.author]) stats[d.author] = { likes: 0, drawings: 0 };
-            stats[d.author].drawings++;
-            stats[d.author].likes += d.likesList.length;
-        });
-
-        const sortedUsers = Object.entries(stats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.likes - a.likes || b.drawings - a.drawings).slice(0, 10);
-        const list = document.getElementById('leaderboard-list');
-        list.innerHTML = '';
-
-        sortedUsers.forEach((user, index) => {
-            const rankClass = index < 3 ? `rank-${index + 1}` : '';
-            let rankIcon = `${index + 1}`;
-            if (index === 0) rankIcon = '<i class="fas fa-trophy"></i>';
-            if (index === 1) rankIcon = '<i class="fas fa-medal"></i>';
-            if (index === 2) rankIcon = '<i class="fas fa-award"></i>';
-
-            list.innerHTML += `
-                <li class="leader-item ${rankClass}">
-                    <div class="leader-rank">${rankIcon}</div>
-                    <div class="leader-info"><span class="clickable-nick" data-nick="${user.name}">@${user.name}</span></div>
-                    <div class="leader-stats"><i class="fas fa-heart"></i> ${user.likes} <span style="font-size:14px; color:var(--secondary-text); margin-left:10px;">(${user.drawings} рис.)</span></div>
-                </li>
-            `;
-        });
-    }
 
     // Профиль
     function showProfile(nickname) {
@@ -146,6 +122,25 @@ document.addEventListener('DOMContentLoaded', () => {
         else userDrawings.forEach(d => renderDrawingCard(d, gallery));
     }
 
+    // Зал славы
+    function generateLeaderboard() {
+        const stats = {};
+        allDrawings.forEach(d => {
+            if (!stats[d.author]) stats[d.author] = { likes: 0, drawings: 0 };
+            stats[d.author].drawings++;
+            stats[d.author].likes += d.likesList.length;
+        });
+
+        const sortedUsers = Object.entries(stats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.likes - a.likes || b.drawings - a.drawings).slice(0, 10);
+        const list = document.getElementById('leaderboard-list');
+        list.innerHTML = '';
+        sortedUsers.forEach((user, index) => {
+            const rankClass = index < 3 ? `rank-${index + 1}` : '';
+            let rankIcon = index === 0 ? '<i class="fas fa-trophy"></i>' : index === 1 ? '<i class="fas fa-medal"></i>' : index === 2 ? '<i class="fas fa-award"></i>' : `${index + 1}`;
+            list.innerHTML += `<li class="leader-item ${rankClass}"><div class="leader-rank">${rankIcon}</div><div class="leader-info"><span class="clickable-nick" data-nick="${user.name}">@${user.name}</span></div><div class="leader-stats"><i class="fas fa-heart"></i> ${user.likes}</div></li>`;
+        });
+    }
+
     // Рендер галереи
     function listenForDrawings() {
         onValue(ref(db, 'drawings'), (snapshot) => {
@@ -164,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 gallery.innerHTML = '';
                 allDrawings.forEach(d => renderDrawingCard(d, gallery));
             } else if (screens.profile.classList.contains('active')) showProfile(currentViewedProfile);
-            else if (screens.leaderboard.classList.contains('active')) generateLeaderboard();
         });
     }
 
@@ -172,14 +166,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'drawing-card';
         const isLiked = drawing.likesList.includes(currentUser);
+        const title = drawing.title || "Без названия";
+
+        // Кнопка редактирования только для автора
+        const editBtnHtml = drawing.author === currentUser 
+            ? `<button class="edit-card-btn" data-id="${drawing.id}" title="Дорисовать/Изменить"><i class="fas fa-edit"></i></button>` 
+            : '';
 
         card.innerHTML = `
             <img src="${drawing.image}" alt="Рисунок">
             <div class="card-info">
-                <span class="author-nick clickable-nick" data-nick="${drawing.author}">@${drawing.author}</span>
-                <div class="like-section">
-                    <button class="like-btn ${isLiked ? 'liked' : ''}"><i class="fas fa-heart"></i></button>
-                    <span class="like-count">${drawing.likesList.length}</span>
+                <div style="width: 100%;">
+                    <h4 class="drawing-title">${title}</h4>
+                    <div class="author-row">
+                        <span class="author-nick clickable-nick" data-nick="${drawing.author}">@${drawing.author}</span>
+                        <div>
+                            ${editBtnHtml}
+                            <div class="like-section" style="display:inline-flex;">
+                                <button class="like-btn ${isLiked ? 'liked' : ''}"><i class="fas fa-heart"></i></button>
+                                <span class="like-count">${drawing.likesList.length}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="card-comments-section">
@@ -192,6 +200,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 </form>
             </div>
         `;
+
+        // Логика кнопки "Изменить"
+        const editBtn = card.querySelector('.edit-card-btn');
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                publishMode = 'edit';
+                editingDrawingId = drawing.id;
+                editingDrawingTitle = drawing.title || "";
+                
+                // Переходим в редактор и загружаем картинку на холст
+                screens.main.classList.remove('active');
+                screens.profile.classList.remove('active');
+                screens.editor.classList.add('active');
+                
+                const container = document.querySelector('.editor-container');
+                canvas.width = container.offsetWidth;
+                canvas.height = container.offsetHeight - document.querySelector('.toolbar').offsetHeight;
+                
+                const img = new Image();
+                img.crossOrigin = "Anonymous";
+                img.onload = () => {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    undoStack = [];
+                    saveState();
+                };
+                img.src = drawing.image;
+            });
+        }
 
         card.querySelector('.like-btn').addEventListener('click', async () => {
             const likeRef = ref(db, `drawings/${drawing.id}/likes/${currentUser}`);
@@ -231,27 +269,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.ctrlKey && e.key === 'z' && screens.editor.classList.contains('active')) undoLastAction();
     });
 
-    // ЛОГИКА ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КИСТИ
     const modeNormalBtn = document.getElementById('mode-normal');
     const modeNeonBtn = document.getElementById('mode-neon');
 
     modeNormalBtn.addEventListener('click', () => {
         isNeonMode = false;
-        modeNormalBtn.classList.add('active');
-        modeNeonBtn.classList.remove('active');
+        modeNormalBtn.classList.add('active'); modeNeonBtn.classList.remove('active');
     });
 
     modeNeonBtn.addEventListener('click', () => {
         isNeonMode = true;
-        modeNeonBtn.classList.add('active');
-        modeNormalBtn.classList.remove('active');
+        modeNeonBtn.classList.add('active'); modeNormalBtn.classList.remove('active');
     });
 
-    // Применение свечения
     function applyNeonEffect() {
-        if (isNeonMode && currentTool !== 'eraser') {
+        if (isNeonMode && currentTool !== 'eraser' && currentTool !== 'fill') {
             const width = parseInt(document.getElementById('line-width').value);
-            ctx.shadowBlur = width * 2.5; // Сильное свечение
+            ctx.shadowBlur = width * 2.5; 
             ctx.shadowColor = document.getElementById('color-picker').value;
         } else {
             ctx.shadowBlur = 0;
@@ -269,19 +303,100 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();    
     }
 
+    // --- АЛГОРИТМ УМНОЙ ЗАЛИВКИ (ФИГУР) ---
+    function hexToRgba(hex) {
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        return [r, g, b, 255];
+    }
+
+    function matchColor(data, pos, targetR, targetG, targetB) {
+        // Добавляем небольшую погрешность (tolerance) для закрашивания краев сглаженных линий
+        const tolerance = 50; 
+        return Math.abs(data[pos] - targetR) <= tolerance &&
+               Math.abs(data[pos+1] - targetG) <= tolerance &&
+               Math.abs(data[pos+2] - targetB) <= tolerance;
+    }
+
+    function floodFill(startX, startY, fillColorHex) {
+        startX = Math.floor(startX);
+        startY = Math.floor(startY);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        const targetPos = (startY * canvas.width + startX) * 4;
+        const targetR = data[targetPos];
+        const targetG = data[targetPos + 1];
+        const targetB = data[targetPos + 2];
+        const targetA = data[targetPos + 3];
+        
+        const fillRgba = hexToRgba(fillColorHex);
+
+        // Если кликнули на тот же цвет - ничего не делаем
+        if (Math.abs(targetR - fillRgba[0]) < 10 && Math.abs(targetG - fillRgba[1]) < 10 && Math.abs(targetB - fillRgba[2]) < 10) return;
+
+        const stack = [[startX, startY]];
+        
+        while (stack.length > 0) {
+            let [x, y] = stack.pop();
+            let pos = (y * canvas.width + x) * 4;
+            
+            while (y-- >= 0 && matchColor(data, pos, targetR, targetG, targetB)) pos -= canvas.width * 4;
+            pos += canvas.width * 4;
+            ++y;
+            
+            let reachLeft = false;
+            let reachRight = false;
+            
+            while (y++ < canvas.height - 1 && matchColor(data, pos, targetR, targetG, targetB)) {
+                data[pos] = fillRgba[0];
+                data[pos+1] = fillRgba[1];
+                data[pos+2] = fillRgba[2];
+                data[pos+3] = 255;
+                
+                if (x > 0) {
+                    if (matchColor(data, pos - 4, targetR, targetG, targetB)) {
+                        if (!reachLeft) { stack.push([x - 1, y]); reachLeft = true; }
+                    } else if (reachLeft) { reachLeft = false; }
+                }
+                
+                if (x < canvas.width - 1) {
+                    if (matchColor(data, pos + 4, targetR, targetG, targetB)) {
+                        if (!reachRight) { stack.push([x + 1, y]); reachRight = true; }
+                    } else if (reachRight) { reachRight = false; }
+                }
+                pos += canvas.width * 4;
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Обработка рисования
     function startDrawing(e) {
         e.preventDefault();
-        isDrawing = true;
         const rect = canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        [lastX, lastY] = [clientX - rect.left, clientY - rect.top];
-        [startX, startY] = [lastX, lastY];
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // Если выбран инструмент "Заливка"
+        if (currentTool === 'fill') {
+            floodFill(x, y, document.getElementById('color-picker').value);
+            saveState();
+            return;
+        }
+
+        isDrawing = true;
+        [lastX, lastY] = [x, y];
+        [startX, startY] = [x, y];
         snapshotImg = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
 
     function draw(e) {
-        if (!isDrawing) return;
+        if (!isDrawing || currentTool === 'fill') return;
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
         const currentX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
@@ -326,30 +441,4 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btn.id === 'undo-button') return;
         btn.addEventListener('click', () => {
             document.querySelector('.tool-btn.active')?.classList.remove('active');
-            btn.classList.add('active'); currentTool = btn.dataset.tool;
-        });
-    });
-
-    document.getElementById('fill-canvas-btn').addEventListener('click', () => { 
-        ctx.fillStyle = document.getElementById('color-picker').value; 
-        ctx.fillRect(0, 0, canvas.width, canvas.height); 
-        saveState(); 
-    });
-
-    // Публикация
-    publishBtn.addEventListener('click', async () => {
-        publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        const imageURL = canvas.toDataURL('image/png'); 
-        try {
-            if (publishMode === 'avatar') {
-                await set(ref(db, 'users/' + currentUser + '/avatar'), imageURL);
-                showProfile(currentUser);
-            } else {
-                await push(ref(db, 'drawings'), { author: currentUser, image: imageURL, timestamp: serverTimestamp() });
-                showScreen('main');
-            }
-        } catch (e) { console.error(e); alert("Ошибка!"); }
-        publishBtn.disabled = false; publishBtn.innerHTML = '<i class="fas fa-upload"></i> Готово';
-    });
-});
-                                                                   
+            btn.clas
