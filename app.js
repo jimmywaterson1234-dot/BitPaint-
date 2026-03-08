@@ -81,6 +81,7 @@ function loadData() {
 function updateDrawingsUI(containerId, sortedIds) {
     const container = document.getElementById(containerId);
     
+    // Удаляем карточки, которых больше нет
     Array.from(container.children).forEach(child => {
         const id = child.id.replace(`card-${containerId}-`, '');
         if (!sortedIds.includes(id)) child.remove();
@@ -89,7 +90,6 @@ function updateDrawingsUI(containerId, sortedIds) {
     sortedIds.forEach((id, index) => {
         let card = document.getElementById(`card-${containerId}-${id}`);
         if (!card) {
-            // Создаем новую карточку с анимацией появления
             card = createDrawingCard(id, allDrawings[id], containerId);
             card.id = `card-${containerId}-${id}`;
             card.classList.add('post-enter-anim');
@@ -137,6 +137,7 @@ function showProfile(nickname) {
     showScreen('profile-screen');
 }
 
+// ДОБАВЛЕНА КНОПКА УДАЛЕНИЯ
 function createDrawingCard(id, data) {
     const card = document.createElement('div');
     card.className = 'drawing-card neon-card';
@@ -154,7 +155,10 @@ function createDrawingCard(id, data) {
     card.innerHTML = `
         <div class="drawing-header">
             <span class="drawing-title">${data.title}</span>
-            ${isAuthor ? `<i class="fa-solid fa-pencil edit-post-btn" onclick="openEditor('edit', '${id}')" title="Редактировать"></i>` : ''}
+            <div style="display:flex; gap: 10px;">
+                ${isAuthor ? `<i class="fa-solid fa-pencil edit-post-btn" onclick="openEditor('edit', '${id}')" title="Редактировать"></i>` : ''}
+                ${isAuthor ? `<i class="fa-solid fa-trash edit-post-btn" style="color:var(--danger);" onclick="deleteDrawing('${id}')" title="Удалить"></i>` : ''}
+            </div>
         </div>
         <img src="${data.image}" class="drawing-img" alt="art">
         <div class="drawing-info">
@@ -180,13 +184,12 @@ function updateDrawingCard(card, id, data) {
     
     card.querySelector('.like-count').innerText = likesCount;
     
-    // ПРАВИЛЬНАЯ АНИМАЦИЯ ЛАЙКА (С принудительным Reflow браузера)
     if (isLiked) {
         if (!likeBtn.classList.contains('liked')) {
             likeBtn.classList.add('liked');
             likeBtn.classList.remove('like-anim');
-            void likeBtn.offsetWidth; // Принудительно заставляем браузер перерисовать элемент
-            likeBtn.classList.add('like-anim'); // Запускаем анимацию
+            void likeBtn.offsetWidth; 
+            likeBtn.classList.add('like-anim');
         }
     } else {
         likeBtn.classList.remove('liked', 'like-anim');
@@ -205,6 +208,13 @@ function updateDrawingCard(card, id, data) {
     if (commentsContainer.innerHTML !== innerCommentsHtml) {
         commentsContainer.innerHTML = innerCommentsHtml;
         commentsContainer.scrollTop = commentsContainer.scrollHeight;
+    }
+}
+
+// ФУНКЦИЯ УДАЛЕНИЯ РИСУНКА
+function deleteDrawing(id) {
+    if (confirm("Вы уверены, что хотите навсегда удалить этот рисунок?")) {
+        db.ref(`drawings/${id}`).remove();
     }
 }
 
@@ -255,7 +265,7 @@ function renderLeaderboard() {
 }
 
 // ==========================================
-// CANVAS EDITOR (ИСПРАВЛЕНО: Белый фон, Очистка, Неон)
+// CANVAS EDITOR
 // ==========================================
 const canvas = document.getElementById('paint-canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -266,7 +276,6 @@ let startX, startY;
 let snapshot;
 let history = []; 
 
-// Отдельная функция для жесткой заливки белым цветом
 function fillCanvasWhite() {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -277,15 +286,12 @@ function openEditor(mode, id = null) {
     editingDrawingId = id;
     showScreen('editor-screen');
     
-    // Задаем размеры
     canvas.width = mode === 'avatar' ? 400 : Math.min(window.innerWidth - 40, 800);
     canvas.height = mode === 'avatar' ? 400 : Math.min(window.innerHeight - 150, 600);
     
-    // ЖЕСТКАЯ ОЧИСТКА В БЕЛЫЙ ЦВЕТ ВСЕГДА
     fillCanvasWhite();
-    history = [canvas.toDataURL()]; // Сохраняем чистое белое состояние в историю
+    history = [canvas.toDataURL()]; 
 
-    // Если это редактирование старого, грузим его поверх белого холста
     if (mode === 'edit' && id && allDrawings[id]) {
         const img = new Image();
         img.crossOrigin = "Anonymous";
@@ -297,10 +303,9 @@ function openEditor(mode, id = null) {
     }
 }
 
-// При изменении окна, если мы рисуем, сохраняем масштаб, но не возвращаем старый рисунок
 window.addEventListener('resize', () => { 
     if(document.getElementById('editor-screen').classList.contains('active')) {
-        const imgData = canvas.toDataURL(); // Запоминаем текущий рисунок
+        const imgData = canvas.toDataURL(); 
         canvas.width = Math.min(window.innerWidth - 40, 800);
         canvas.height = Math.min(window.innerHeight - 150, 600);
         fillCanvasWhite();
@@ -328,7 +333,6 @@ function getSettings() {
     };
 }
 
-// ИСПРАВЛЕННАЯ ЛОГИКА НЕОНА
 function applySettings() {
     const s = getSettings();
     ctx.lineWidth = s.size;
@@ -336,18 +340,16 @@ function applySettings() {
     ctx.lineJoin = "round";
     
     if (currentTool === 'eraser') {
-        ctx.strokeStyle = "#ffffff"; // Ластик всегда стирает БЕЛЫМ
+        ctx.strokeStyle = "#ffffff";
         ctx.shadowBlur = 0;
         ctx.shadowColor = "transparent";
     } else {
         ctx.strokeStyle = s.color;
         ctx.fillStyle = s.color;
         if (s.neon) { 
-            // Неон включен
-            ctx.shadowBlur = parseInt(s.size) + 10; // Чем толще кисть, тем больше радиус свечения
+            ctx.shadowBlur = parseInt(s.size) + 10;
             ctx.shadowColor = s.color; 
         } else { 
-            // Неон выключен (ЖЕСТКИЙ СБРОС ТЕНИ)
             ctx.shadowBlur = 0; 
             ctx.shadowColor = "transparent"; 
         }
@@ -386,7 +388,7 @@ const startDraw = (e) => {
     isDrawing = true;
     const pos = getPos(e);
     startX = pos.x; startY = pos.y;
-    applySettings(); // Обязательно применяем настройки ДО начала рисования
+    applySettings(); 
     
     if (currentTool === 'fill') {
         floodFill(Math.floor(startX), Math.floor(startY), getSettings().color);
@@ -407,8 +409,16 @@ const drawing = (e) => {
     if (['line', 'rect', 'circle'].includes(currentTool)) {
         ctx.putImageData(snapshot, 0, 0);
         ctx.beginPath(); 
-        applySettings(); // Повторно применяем после putImageData
-        ctx.moveTo(startX, startY);
+        applySettings(); 
+        
+        // ИСПРАВЛЕНИЕ БАГА С КРУГОМ (Полоса из центра)
+        if (currentTool === 'circle') {
+            const radius = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
+            // Перемещаем "перо" на край круга, чтобы не было линии из центра
+            ctx.moveTo(startX + radius, startY);
+        } else {
+            ctx.moveTo(startX, startY);
+        }
     }
 
     if (currentTool === 'pencil' || currentTool === 'eraser' || currentTool === 'line') {
@@ -482,7 +492,7 @@ function floodFill(startX, startY, fillColorHex) {
 // СОХРАНЕНИЕ / ПУБЛИКАЦИЯ
 // ==========================================
 function saveDrawing() {
-    const dataURL = canvas.toDataURL('image/png'); // Теперь он сохранит белые пиксели как надо
+    const dataURL = canvas.toDataURL('image/png'); 
     if (editorMode === 'avatar') {
         db.ref(`users/${currentUser}`).update({ avatar: dataURL });
         alert('Аватар обновлен!'); closeEditor(); return;
