@@ -1,5 +1,6 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp, update } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+// ИСПРАВЛЕННЫЕ РАБОЧИЕ ССЫЛКИ НА FIREBASE (Версия 10.12.2)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, push, remove, serverTimestamp, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
@@ -50,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentUser) showScreen('main');
     else showScreen('login');
 
-    // ИСПРАВЛЕННАЯ ЛОГИКА ВХОДА
+    // СТРОГАЯ ЛОГИКА ВХОДА ВЕРНУЛАСЬ (Привязка к устройству)
     loginBtn.addEventListener('click', async () => {
         const nickname = nickInput.value.trim();
         if (!nickname) {
@@ -61,16 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const userRef = ref(db, 'users/' + nickname);
         try {
             const snapshot = await get(userRef);
-            // Если аккаунта нет - создаем. Если есть - просто пускаем (без пароля)
-            if (!snapshot.exists()) {
-                await set(userRef, { joined: serverTimestamp(), avatar: '' });
+            
+            // Если аккаунт есть в базе, НО это не то устройство, с которого его создали
+            if (snapshot.exists() && localStorage.getItem('bitpaint_currentUser') !== nickname) {
+                 document.getElementById('nickname-error').textContent = 'Этот ник занят другим устройством.';
+            } else {
+                 // Впускаем или создаем новый аккаунт
+                 if (!snapshot.exists()) await set(userRef, { joined: serverTimestamp(), avatar: '' });
+                 currentUser = nickname;
+                 localStorage.setItem('bitpaint_currentUser', currentUser);
+                 document.getElementById('nickname-error').textContent = '';
+                 showScreen('main');
             }
-            
-            currentUser = nickname;
-            localStorage.setItem('bitpaint_currentUser', currentUser);
-            document.getElementById('nickname-error').textContent = ''; // очищаем ошибку
-            showScreen('main');
-            
         } catch (error) {
             console.error("Ошибка входа:", error);
             document.getElementById('nickname-error').textContent = 'Ошибка соединения с базой.';
@@ -163,16 +166,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 drawing.commentsList = drawing.comments ? Object.values(drawing.comments) : [];
                 allDrawings.push(drawing);
             });
-            // Безопасная сортировка на случай старых рисунков без времени
             allDrawings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
             if (screens.main.classList.contains('active')) {
                 const gallery = document.getElementById('gallery-container');
                 gallery.innerHTML = '';
                 allDrawings.forEach(d => renderDrawingCard(d, gallery));
-            } else if (screens.profile.classList.contains('active')) {
-                showProfile(currentViewedProfile);
-            }
+            } else if (screens.profile.classList.contains('active')) showProfile(currentViewedProfile);
         });
     }
 
@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             ctx.putImageData(imageData, 0, 0);
         } catch (e) {
-            console.error("Не удалось выполнить заливку (вероятно из-за CORS ограничений картинки):", e);
+            console.error("Заливка не сработала:", e);
         }
     }
 
@@ -443,9 +443,4 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.addEventListener('mousedown', startDrawing); canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseup', stopDrawing); canvas.addEventListener('mouseout', stopDrawing);
     canvas.addEventListener('touchstart', startDrawing, { passive: false });
-    canvas.addEventListener('touchmove', draw, { passive: false });
-    canvas.addEventListener('touchend', stopDrawing);
-    window.addEventListener('resize', setupCanvas);
-
-    document.querySelectorAll('.tool-btn').forEach(btn => {
-        if(bt
+    canvas.addEventListener('touchmove', draw, { pa
