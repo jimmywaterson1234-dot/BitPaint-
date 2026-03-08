@@ -2,114 +2,113 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>BitPaint - Рисуй и Делись</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BitPaint - Neon Cyberpunk Canvas</title>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- CSS -->
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Firebase Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 </head>
 <body>
-
-    <!-- Экран входа -->
-    <div id="login-screen" class="screen active">
-        <div class="login-container">
-            <h1>Добро пожаловать в BitPaint</h1>
-            <p>Войдите, чтобы творить и делиться</p>
-            <input type="text" id="nickname-input" placeholder="Введите ваш ник">
-            <button id="login-button">Войти</button>
-            <p id="nickname-error" class="error-message"></p>
-        </div>
-    </div>
-
-    <!-- Главный экран (Галерея) -->
-    <div id="main-screen" class="screen">
-        <header>
-            <div class="logo">BitPaint</div>
-            <div class="user-info">
-                <button id="leaderboard-button" class="header-btn" title="Зал славы"><i class="fas fa-trophy"></i> Топ</button>
-                <span id="current-user-nickname" class="clickable-nick current-user-nick" title="Мой профиль"></span>
-                <button id="draw-button"><i class="fas fa-pencil-alt"></i> Рисовать</button>
+    <div id="app">
+        <!-- 1. Login Screen -->
+        <section id="login-screen" class="screen active">
+            <div class="login-card neon-card">
+                <h1 class="neon-text">BitPaint</h1>
+                <p>Войдите в кибер-мастерскую</p>
+                <input type="text" id="nickname-input" placeholder="Ваш уникальный никнейм..." maxlength="20">
+                <button id="login-btn" class="neon-btn"><i class="fa-solid fa-right-to-bracket"></i> Войти</button>
             </div>
-        </header>
-        <main id="gallery-container" class="gallery-grid"></main>
-    </div>
+        </section>
 
-    <!-- ЭКРАН ПРОФИЛЯ -->
-    <div id="profile-screen" class="screen">
-        <header class="top-bar">
-            <button class="icon-button back-to-main"><i class="fas fa-arrow-left"></i> В ленту</button>
-        </header>
-        <div class="profile-header-card">
-            <div class="profile-avatar-container"><img id="profile-avatar-img" src="" alt="Аватар"></div>
-            <div class="profile-info">
-                <h2 id="profile-nickname">@Nick</h2>
+        <!-- 2. Main Gallery Screen -->
+        <section id="main-screen" class="screen">
+            <header class="app-header neon-card">
+                <h2 class="neon-text logo">BitPaint</h2>
+                <div class="header-controls">
+                    <button class="icon-btn" onclick="showScreen('leaderboard-screen')" title="Зал Славы"><i class="fa-solid fa-trophy"></i></button>
+                    <button class="neon-btn btn-sm" onclick="openEditor('new')"><i class="fa-solid fa-paintbrush"></i> Рисовать</button>
+                    <div class="user-profile-link" onclick="showProfile(currentUser)">
+                        <img id="header-avatar" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="Avatar">
+                        <span id="header-nickname">User</span>
+                    </div>
+                </div>
+            </header>
+            <main id="feed" class="gallery-grid"></main>
+        </section>
+
+        <!-- 3. Profile Screen -->
+        <section id="profile-screen" class="screen">
+            <header class="app-header neon-card">
+                <button class="icon-btn" onclick="showScreen('main-screen')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                <h2 class="neon-text">Профиль</h2>
+                <div style="width: 40px;"></div> <!-- Spacer -->
+            </header>
+            <div class="profile-info neon-card">
+                <div class="avatar-container">
+                    <img id="profile-avatar" src="" alt="Avatar">
+                    <button id="edit-avatar-btn" class="icon-btn edit-avatar" onclick="openEditor('avatar')"><i class="fa-solid fa-pencil"></i></button>
+                </div>
+                <h3 id="profile-nickname" class="neon-text">Nickname</h3>
                 <div class="profile-stats">
-                    <p><i class="fas fa-heart"></i> Лайков: <span id="profile-total-likes">0</span></p>
-                    <p><i class="fas fa-image"></i> Рисунков: <span id="profile-total-drawings">0</span></p>
+                    <span><i class="fa-solid fa-heart"></i> Лайков: <b id="stat-likes">0</b></span>
+                    <span><i class="fa-solid fa-image"></i> Работ: <b id="stat-drawings">0</b></span>
                 </div>
             </div>
-            <button id="edit-avatar-button"><i class="fas fa-user-edit"></i> Изменить аватар</button>
-        </div>
-        <h3 class="section-title">Галерея пользователя</h3>
-        <main id="profile-gallery-container" class="gallery-grid"></main>
-    </div>
+            <main id="profile-grid" class="gallery-grid"></main>
+        </section>
 
-    <!-- ЭКРАН ЗАЛА СЛАВЫ -->
-    <div id="leaderboard-screen" class="screen">
-        <header class="top-bar">
-            <button class="icon-button back-to-main"><i class="fas fa-arrow-left"></i> Назад</button>
-        </header>
-        <h2 class="section-title" style="text-align: center; color: var(--accent-neon); font-size: 32px; border-bottom: none;"><i class="fas fa-crown" style="color: gold;"></i> Зал Славы (Топ-10)</h2>
-        <div class="leaderboard-container">
-            <ul id="leaderboard-list"></ul>
-        </div>
-    </div>
+        <!-- 4. Leaderboard Screen -->
+        <section id="leaderboard-screen" class="screen">
+            <header class="app-header neon-card">
+                <button class="icon-btn" onclick="showScreen('main-screen')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                <h2 class="neon-text">Зал Славы</h2>
+                <div style="width: 40px;"></div>
+            </header>
+            <main id="leaderboard-list" class="leaderboard-container"></main>
+        </section>
 
-    <!-- Экран рисования (Редактор) -->
-    <div id="editor-screen" class="screen">
-        <div class="editor-container">
-            <div class="toolbar">
-                <div class="tool-group">
-                    <button class="tool-btn" id="undo-button" title="Отменить (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+        <!-- 5. Canvas Editor Screen -->
+        <section id="editor-screen" class="screen">
+            <div class="editor-header neon-card">
+                <div class="toolbar-group">
+                    <button class="icon-btn" onclick="closeEditor()"><i class="fa-solid fa-times"></i></button>
+                    <button class="icon-btn" onclick="undo()" title="Шаг назад (Ctrl+Z)"><i class="fa-solid fa-rotate-left"></i></button>
                 </div>
                 
-                <div class="tool-group brush-modes">
-                    <button class="mode-btn active" id="mode-normal">Обычная</button>
-                    <button class="mode-btn" id="mode-neon">Неон ✨</button>
+                <div class="toolbar-group tools">
+                    <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fa-solid fa-pen"></i></button>
+                    <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fa-solid fa-eraser"></i></button>
+                    <button class="tool-btn" data-tool="line" title="Линия"><i class="fa-solid fa-minus"></i></button>
+                    <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="fa-regular fa-square"></i></button>
+                    <button class="tool-btn" data-tool="circle" title="Круг"><i class="fa-regular fa-circle"></i></button>
+                    <button class="tool-btn" data-tool="fill" title="Заливка"><i class="fa-solid fa-fill-drip"></i></button>
                 </div>
 
-                <div class="tool-group">
-                    <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
-                    <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
-                    <button class="tool-btn" data-tool="fill" title="Умная Заливка"><i class="fas fa-fill-drip"></i></button>
-                    <button class="tool-btn" data-tool="line" title="Линия"><i class="fas fa-slash"></i></button>
-                    <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="far fa-square"></i></button>
-                    <button class="tool-btn" data-tool="circle" title="Круг"><i class="far fa-circle"></i></button>
-                </div>
-                <div class="tool-group">
-                    <label for="color-picker" class="color-label" title="Выбор цвета">
-                        <i class="fas fa-palette"></i>
-                        <input type="color" id="color-picker" value="#8a2be2">
+                <div class="toolbar-group settings">
+                    <input type="color" id="color-picker" value="#b967ff">
+                    <input type="range" id="size-slider" min="1" max="50" value="5">
+                    <label class="neon-toggle">
+                        <input type="checkbox" id="neon-mode" checked>
+                        <span class="toggle-label">Неон ✨</span>
                     </label>
                 </div>
-                <div class="tool-group">
-                     <label for="line-width" class="width-label" title="Толщина"><i class="fas fa-arrows-alt-h"></i></label>
-                    <input type="range" id="line-width" min="1" max="50" value="5">
-                </div>
-                <div class="tool-group right-align">
-                     <button id="publish-button"><i class="fas fa-upload"></i> Сохранить</button>
-                     <button id="back-to-gallery-button"><i class="fas fa-times"></i></button>
+
+                <div class="toolbar-group">
+                    <button class="neon-btn btn-sm" onclick="saveDrawing()"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
                 </div>
             </div>
-            <canvas id="paint-canvas"></canvas>
-        </div>
+            <div class="canvas-container">
+                <canvas id="paint-canvas"></canvas>
+            </div>
+        </section>
     </div>
-    
-    <!-- ПОДКЛЮЧАЕМ FIREBASE КЛАССИЧЕСКИМ СПОСОБОМ -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-    
-    <!-- ПОДКЛЮЧАЕМ ВАШ СКРИПТ (Без type="module") -->
-    <script src="script.js"></script>
+
+    <!-- JS -->
+    <script src="app.js"></script>
 </body>
 </html>
