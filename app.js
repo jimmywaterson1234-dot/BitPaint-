@@ -1,8 +1,6 @@
-/**
- * BITPAINT APP LOGIC - REALTIME EDITION
- */
-
-// 1. КОНФИГУРАЦИЯ FIREBASE
+// ==========================================
+// 1. FIREBASE ИНИЦИАЛИЗАЦИЯ (Твои ключи успешно интегрированы)
+// ==========================================
 const firebaseConfig = {
     apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
     authDomain: "bitpaint-f7dbd.firebaseapp.com",
@@ -10,378 +8,496 @@ const firebaseConfig = {
     projectId: "bitpaint-f7dbd",
     storageBucket: "bitpaint-f7dbd.firebasestorage.app",
     messagingSenderId: "193627137592",
-    appId: "1:193627137592:web:4f3835e21c0adf024468cd"
+    appId: "1:193627137592:web:4f3835e21c0adf024468cd",
+    measurementId: "G-2JR3GPQ60R"
 };
 
+// Инициализируем Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// ==========================================
+// 2. ГЛОБАЛЬНОЕ СОСТОЯНИЕ
+// ==========================================
 let currentUser = null;
-let drawingsData = {}; 
-let usersData = {};    
+let postsData = {}; 
+let usersData = {};
 
-const screens = document.querySelectorAll('.screen');
-const navBtns = document.querySelectorAll('.nav-btn');
-const feedContainer = document.getElementById('feed-container');
-const profileGallery = document.getElementById('profile-gallery');
-const hallContainer = document.getElementById('hall-container');
+// ==========================================
+// 3. АВТОРИЗАЦИЯ И НАВИГАЦИЯ
+// ==========================================
+const authScreen = document.getElementById('auth-screen');
+const appScreen = document.getElementById('app-screen');
+const authBtn = document.getElementById('auth-btn');
+const authNickname = document.getElementById('auth-nickname');
 
-// 3. АВТОРИЗАЦИЯ И ПРОФИЛЬ
-function initAuth() {
-    const savedUser = localStorage.getItem('bitpaint_user');
-    if (savedUser) {
-        currentUser = savedUser;
-        checkAndCreateUserNode();
-        updateHeaderProfile();
-        switchScreen('main-screen');
+function generateAvatar(name) {
+    return `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}&backgroundColor=1a1a2e`;
+}
+
+function login(nickname) {
+    if(nickname.length < 3) return alert('Никнейм от 3 символов!');
+    currentUser = {
+        name: nickname,
+        avatar: localStorage.getItem(`avatar_${nickname}`) || generateAvatar(nickname)
+    };
+    localStorage.setItem('bitpaint_user', nickname);
+    
+    // Сохраняем/обновляем юзера в БД для зала славы
+    db.ref(`users/${nickname}`).update({ name: nickname, avatar: currentUser.avatar });
+
+    document.getElementById('nav-username').textContent = currentUser.name;
+    document.getElementById('nav-avatar').src = currentUser.avatar;
+    
+    authScreen.classList.remove('active');
+    appScreen.classList.add('active');
+    initFirebaseListeners();
+}
+
+authBtn.addEventListener('click', () => login(authNickname.value.trim()));
+if(localStorage.getItem('bitpaint_user')) {
+    login(localStorage.getItem('bitpaint_user'));
+}
+
+// Навигация
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        document.getElementById(e.currentTarget.dataset.target).classList.add('active');
+    });
+});
+
+// Открытие профиля
+document.getElementById('my-profile-btn').addEventListener('click', () => openProfile(currentUser.name));
+
+function openProfile(username) {
+    const user = usersData[username] || { name: username, avatar: generateAvatar(username), totalLikes: 0 };
+    document.getElementById('profile-name').textContent = user.name;
+    document.getElementById('profile-avatar').src = user.avatar;
+    document.getElementById('profile-likes').textContent = user.totalLikes || 0;
+    
+    const changeBtn = document.getElementById('change-avatar-btn');
+    if(username === currentUser.name) {
+        changeBtn.style.display = 'block';
+        changeBtn.onclick = () => {
+            const newUrl = prompt('Введите URL новой аватарки (прямую ссылку на картинку):');
+            if(newUrl) {
+                currentUser.avatar = newUrl;
+                localStorage.setItem(`avatar_${username}`, newUrl);
+                document.getElementById('profile-avatar').src = newUrl;
+                document.getElementById('nav-avatar').src = newUrl;
+                db.ref(`users/${username}`).update({ avatar: newUrl });
+            }
+        };
     } else {
-        switchScreen('auth-screen');
+        changeBtn.style.display = 'none';
     }
 
-    document.getElementById('auth-btn').addEventListener('click', () => {
-        const nick = document.getElementById('auth-nickname').value.trim();
-        if (nick.length >= 3) {
-            currentUser = nick;
-            localStorage.setItem('bitpaint_user', nick);
-            checkAndCreateUserNode();
-            updateHeaderProfile();
-            switchScreen('main-screen');
-        } else alert('Никнейм должен быть не короче 3 символов!');
+    // Рендер галереи пользователя
+    const gallery = document.getElementById('profile-gallery');
+    gallery.innerHTML = '';
+    Object.values(postsData).filter(p => p.author === username).forEach(post => {
+        const img = document.createElement('img');
+        img.src = post.image;
+        img.className = 'post-image glow-box';
+        img.style.cursor = 'pointer';
+        img.onclick = () => { document.querySelector('[data-target="feed-view"]').click(); };
+        gallery.appendChild(img);
     });
 
-    document.getElementById('change-avatar-btn').addEventListener('click', () => {
-        const newUrl = prompt('Введите URL новой аватарки:', usersData[currentUser]?.avatar || '');
-        if (newUrl) db.ref('users/' + currentUser).update({ avatar: newUrl });
-    });
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('profile-view').classList.add('active');
 }
 
-function checkAndCreateUserNode() {
-    db.ref('users/' + currentUser).once('value', snapshot => {
-        if (!snapshot.exists()) {
-            db.ref('users/' + currentUser).set({
-                nickname: currentUser,
-                avatar: `https://api.dicebear.com/6.x/bottts/svg?seed=${currentUser}`,
-                totalLikes: 0
-            });
-        }
-    });
-}
-
-function updateHeaderProfile() {
-    document.getElementById('app-header').classList.remove('hidden');
-    document.getElementById('header-nickname').textContent = currentUser;
-    db.ref('users/' + currentUser).on('value', snap => {
-        if (snap.val() && snap.val().avatar) document.getElementById('header-avatar').src = snap.val().avatar;
-    });
-}
-
-// 4. НАВИГАЦИЯ И ПЕРЕХОДЫ
-function switchScreen(screenId) {
-    screens.forEach(s => s.classList.remove('active'));
-    document.getElementById(screenId).classList.add('active');
-    
-    navBtns.forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.querySelector(`.nav-btn[data-target="${screenId}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
-
-    if (screenId === 'draw-screen') initCanvas();
-    if (screenId === 'hall-screen') renderHallOfFame();
-    if (screenId === 'profile-screen' && !document.getElementById('profile-nickname').textContent) renderProfile(currentUser);
-}
-
-navBtns.forEach(btn => btn.addEventListener('click', e => switchScreen(e.currentTarget.dataset.target)));
-
-window.viewProfile = function(nickname) {
-    renderProfile(nickname);
-    switchScreen('profile-screen');
-};
-
-// 5. ДВИЖОК РИСОВАНИЯ
-const canvas = document.getElementById('paint-canvas');
+// ==========================================
+// 4. ДВИЖОК РИСОВАНИЯ (CANVAS API)
+// ==========================================
+const canvas = document.getElementById('main-canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
-let isDrawing = false;
-let currentTool = 'pencil';
-let startX, startY, snapshot;
+let isDrawing = false, startX = 0, startY = 0, snapshot;
 let undoStack = [];
+let currentTool = 'pencil';
 
+// Инициализация холста (белый фон)
+function clearCanvas() {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    saveState();
+}
+if(undoStack.length === 0) clearCanvas();
+
+// Сохранение состояния (до 20 шагов)
 function saveState() {
     if (undoStack.length >= 20) undoStack.shift();
     undoStack.push(canvas.toDataURL());
 }
 
-document.getElementById('undo-btn').addEventListener('click', () => {
-    if (undoStack.length > 0) {
-        let imgData = undoStack.pop();
-        let img = new Image();
-        img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
+document.getElementById('tool-undo').addEventListener('click', () => {
+    if(undoStack.length > 1) {
+        undoStack.pop(); // удаляем текущее
+        const imgData = undoStack[undoStack.length - 1];
+        const img = new Image();
         img.src = imgData;
-    } else clearCanvasWhite();
+        img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+        };
+    } else if(undoStack.length === 1) {
+        clearCanvas();
+    }
 });
 
-const textures = { wood: createWoodPattern(), brick: createBrickPattern() };
-function createWoodPattern() { const c = document.createElement('canvas'); c.width = 100; c.height = 100; const cx = c.getContext('2d'); cx.fillStyle = '#8B4513'; cx.fillRect(0,0,100,100); cx.strokeStyle = '#5C4033'; cx.lineWidth = 2; for(let i=0; i<15; i++) { cx.beginPath(); cx.moveTo(0, i*8 + Math.random()*5); cx.lineTo(100, i*8 + Math.random()*5); cx.stroke(); } return c; }
-function createBrickPattern() { const c = document.createElement('canvas'); c.width = 40; c.height = 40; const cx = c.getContext('2d'); cx.fillStyle = '#B22222'; cx.fillRect(0,0,40,40); cx.strokeStyle = '#ecf0f1'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(0,20); cx.lineTo(40,20); cx.stroke(); cx.beginPath(); cx.moveTo(20,0); cx.lineTo(20,20); cx.stroke(); cx.beginPath(); cx.moveTo(0,20); cx.lineTo(0,40); cx.stroke(); cx.beginPath(); cx.moveTo(40,20); cx.lineTo(40,40); cx.stroke(); return c; }
-
-function getCoordinates(e) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
-}
-
-function clearCanvasWhite() { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height); undoStack = []; }
-
-function initCanvas() { if (!canvas.getAttribute('data-init')) { clearCanvasWhite(); canvas.setAttribute('data-init', 'true'); } }
-
-document.querySelectorAll('.tool-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+// Инструменты
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
         e.currentTarget.classList.add('active');
         currentTool = e.currentTarget.dataset.tool;
     });
 });
 
-document.getElementById('clear-canvas').addEventListener('click', () => { saveState(); clearCanvasWhite(); });
+// Генерация текстур
+function getFillStyle(color) {
+    const type = document.getElementById('tool-texture').value;
+    if (type === 'fill' || type === 'outline') return color;
+    
+    const patCanvas = document.createElement('canvas');
+    const pCtx = patCanvas.getContext('2d');
+    patCanvas.width = 20; patCanvas.height = 20;
+    pCtx.fillStyle = color;
+    pCtx.fillRect(0, 0, 20, 20);
+    pCtx.strokeStyle = '#000';
+    pCtx.lineWidth = 2;
 
-function hexToRgba(hex) { let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16); return [r, g, b, 255]; }
+    if (type === 'wood') {
+        pCtx.beginPath();
+        for(let i=0; i<5; i++) {
+            pCtx.moveTo(0, Math.random()*20);
+            pCtx.bezierCurveTo(5, Math.random()*20, 15, Math.random()*20, 20, Math.random()*20);
+        }
+        pCtx.stroke();
+    } else if (type === 'brick') {
+        pCtx.strokeRect(0, 0, 20, 10);
+        pCtx.strokeRect(-10, 10, 20, 10);
+        pCtx.strokeRect(10, 10, 20, 10);
+    }
+    return ctx.createPattern(patCanvas, 'repeat');
+}
+
+// Умная заливка (Flood Fill - Iterative)
 function floodFill(startX, startY, fillColorHex) {
-    startX = Math.round(startX); startY = Math.round(startY);
-    const imgData = ctx.getImageData(0,0, canvas.width, canvas.height); const data = imgData.data; const w = canvas.width; const h = canvas.height;
-    const startPos = (startY * w + startX) * 4; const startR = data[startPos], startG = data[startPos+1], startB = data[startPos+2], startA = data[startPos+3]; const [fR, fG, fB, fA] = hexToRgba(fillColorHex);
-    if (startR===fR && startG===fG && startB===fB && startA===fA) return;
-    function match(p) { return data[p]===startR && data[p+1]===startG && data[p+2]===startB && data[p+3]===startA; }
-    const stack = [[startX, startY]];
-    while(stack.length) {
-        let [x, y] = stack.pop(); let p = (y * w + x) * 4;
-        while(y >= 0 && match(p)) { y--; p -= w * 4; }
-        p += w * 4; y++; let reachL = false, reachR = false;
-        while(y < h && match(p)) {
-            data[p] = fR; data[p+1] = fG; data[p+2] = fB; data[p+3] = fA;
-            if (x > 0) { if (match(p - 4)) { if (!reachL) { stack.push([x - 1, y]); reachL = true; } } else if (reachL) reachL = false; }
-            if (x < w - 1) { if (match(p + 4)) { if (!reachR) { stack.push([x + 1, y]); reachR = true; } } else if (reachR) reachR = false; }
-            y++; p += w * 4;
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    
+    const getPixelIdx = (x, y) => (y * canvas.width + x) * 4;
+    const startIdx = getPixelIdx(startX, startY);
+    const startR = data[startIdx], startG = data[startIdx+1], startB = data[startIdx+2], startA = data[startIdx+3];
+    
+    // Преобразуем hex в rgb
+    const hex = fillColorHex.replace('#','');
+    const fillR = parseInt(hex.substring(0,2), 16), fillG = parseInt(hex.substring(2,4), 16), fillB = parseInt(hex.substring(4,6), 16);
+
+    if(startR === fillR && startG === fillG && startB === fillB) return; // Тот же цвет
+
+    const matchStartColor = (idx) => data[idx] === startR && data[idx+1] === startG && data[idx+2] === startB && data[idx+3] === startA;
+    const colorPixel = (idx) => { data[idx] = fillR; data[idx+1] = fillG; data[idx+2] = fillB; data[idx+3] = 255; };
+
+    const pixelStack = [[startX, startY]];
+    
+    while(pixelStack.length) {
+        let newPos = pixelStack.pop();
+        let x = newPos[0], y = newPos[1];
+        let pixelPos = getPixelIdx(x, y);
+        
+        while(y-- >= 0 && matchStartColor(pixelPos)) pixelPos -= canvas.width * 4;
+        pixelPos += canvas.width * 4; ++y;
+        
+        let reachLeft = false, reachRight = false;
+        while(y++ < canvas.height-1 && matchStartColor(pixelPos)) {
+            colorPixel(pixelPos);
+            if(x > 0) {
+                if(matchStartColor(pixelPos - 4)) {
+                    if(!reachLeft) { pixelStack.push([x - 1, y]); reachLeft = true; }
+                } else if(reachLeft) reachLeft = false;
+            }
+            if(x < canvas.width - 1) {
+                if(matchStartColor(pixelPos + 4)) {
+                    if(!reachRight) { pixelStack.push([x + 1, y]); reachRight = true; }
+                } else if(reachRight) reachRight = false;
+            }
+            pixelPos += canvas.width * 4;
         }
     }
     ctx.putImageData(imgData, 0, 0);
 }
 
-const startDraw = (e) => {
-    isDrawing = true; const {x, y} = getCoordinates(e); startX = x; startY = y;
-    saveState(); snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const color = document.getElementById('color-picker').value;
-    
-    if (currentTool === 'bucket') { floodFill(x, y, color); isDrawing = false; return; }
-    if (currentTool === 'picker') {
-        const p = ctx.getImageData(x, y, 1, 1).data;
-        document.getElementById('color-picker').value = "#" + ("000000" + ((p[0] << 16) | (p[1] << 8) | p[2]).toString(16)).slice(-6);
-        document.querySelector('[data-tool="pencil"]').click(); isDrawing = false; return;
-    }
+// Pointer Events
+const getPointerPos = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+};
 
-    ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineWidth = document.getElementById('brush-size').value; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+const setupCtx = () => {
+    const color = document.getElementById('tool-color').value;
+    ctx.lineWidth = document.getElementById('tool-size').value;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : color;
-    if (document.getElementById('neon-toggle').checked && currentTool !== 'eraser') { ctx.shadowBlur = 15; ctx.shadowColor = ctx.strokeStyle; } 
-    else ctx.shadowBlur = 0;
-};
-
-const drawing = (e) => {
-    if (!isDrawing) return; e.preventDefault(); const {x, y} = getCoordinates(e);
-    if (currentTool === 'pencil' || currentTool === 'eraser') { ctx.lineTo(x, y); ctx.stroke(); } 
-    else if (currentTool === 'line' || currentTool === 'rect' || currentTool === 'circle') {
-        ctx.putImageData(snapshot, 0, 0); const fillType = document.getElementById('shape-fill').value;
-        if (fillType !== 'none') {
-            if (fillType === 'solid') ctx.fillStyle = document.getElementById('color-picker').value;
-            if (fillType === 'wood') ctx.fillStyle = ctx.createPattern(textures.wood, 'repeat');
-            if (fillType === 'brick') ctx.fillStyle = ctx.createPattern(textures.brick, 'repeat');
-        }
-        ctx.beginPath();
-        if (currentTool === 'line') { ctx.moveTo(startX, startY); ctx.lineTo(x, y); } 
-        else if (currentTool === 'rect') { ctx.rect(startX, startY, x - startX, y - startY); if (fillType !== 'none') ctx.fill(); } 
-        else if (currentTool === 'circle') { let r = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2)); ctx.arc(startX, startY, r, 0, 2 * Math.PI); if (fillType !== 'none') ctx.fill(); }
-        ctx.stroke();
+    ctx.fillStyle = currentTool === 'eraser' ? '#ffffff' : getFillStyle(color);
+    
+    if(document.getElementById('tool-neon').checked && currentTool !== 'eraser') {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+    } else {
+        ctx.shadowBlur = 0;
     }
 };
 
-const stopDraw = () => { isDrawing = false; };
-canvas.addEventListener('pointerdown', startDraw); canvas.addEventListener('pointermove', drawing);
-window.addEventListener('pointerup', stopDraw); canvas.addEventListener('pointercancel', stopDraw);
+canvas.addEventListener('pointerdown', (e) => {
+    isDrawing = true;
+    const pos = getPointerPos(e);
+    startX = pos.x; startY = pos.y;
+    setupCtx();
 
-// 6. УМНЫЙ РЕАЛ-ТАЙМ РЕНДЕРИНГ FIREBASE (Точечное обновление)
-db.ref('users').on('value', snap => {
-    usersData = snap.val() || {};
-    if(document.getElementById('hall-screen').classList.contains('active')) renderHallOfFame();
+    if(currentTool === 'bucket') {
+        floodFill(Math.floor(startX), Math.floor(startY), document.getElementById('tool-color').value);
+        saveState();
+        isDrawing = false;
+        return;
+    }
+
+    if(currentTool === 'eyedropper') {
+        const p = ctx.getImageData(startX, startY, 1, 1).data;
+        const hex = "#" + ("000000" + ((p[0] << 16) | (p[1] << 8) | p[2]).toString(16)).slice(-6);
+        document.getElementById('tool-color').value = hex;
+        document.querySelector('[data-tool="pencil"]').click();
+        isDrawing = false;
+        return;
+    }
+
+    snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    e.preventDefault(); // Защита от скролла на тачах
 });
 
-document.getElementById('publish-btn').addEventListener('click', () => {
-    const title = document.getElementById('art-title').value.trim() || 'Без названия';
-    ctx.shadowBlur = 0; const dataUrl = canvas.toDataURL('image/png');
-    db.ref('drawings').push().set({ title: title, author: currentUser, imageUrl: dataUrl, timestamp: firebase.database.ServerValue.TIMESTAMP })
-    .then(() => { document.getElementById('art-title').value = ''; clearCanvasWhite(); switchScreen('main-screen'); });
-});
-
-db.ref('drawings').on('value', snap => {
-    const data = snap.val() || {};
-    const sortedIds = Object.keys(data).sort((a, b) => data[b].timestamp - data[a].timestamp);
+canvas.addEventListener('pointermove', (e) => {
+    if (!isDrawing) return;
+    const pos = getPointerPos(e);
     
-    sortedIds.forEach((id, index) => {
-        const art = data[id];
-        let card = document.getElementById(`art-${id}`);
-        const likesCount = art.likes ? Object.keys(art.likes).length : 0;
-        const isLikedByMe = art.likes && art.likes[currentUser];
-        const commentsObj = art.comments || {};
-        const commentsCount = Object.keys(commentsObj).length;
+    if (['line', 'rect', 'circle'].includes(currentTool)) {
+        ctx.putImageData(snapshot, 0, 0);
+    }
 
-        if (card) {
-            // === АНИМАЦИЯ ЛАЙКОВ ===
-            const likeBtn = card.querySelector('.like-btn');
-            const oldLikes = parseInt(likeBtn.dataset.likes || 0);
-            
-            if (likesCount !== oldLikes) {
-                likeBtn.innerHTML = `<i class="fa-solid fa-heart"></i> ${likesCount}`;
-                likeBtn.dataset.likes = likesCount;
-                if (likesCount > oldLikes) { // Триггер анимации, если кто-то поставил лайк
-                    const icon = likeBtn.querySelector('i');
-                    icon.classList.remove('pulse');
-                    void icon.offsetWidth; // Сброс reflow для перезапуска CSS
-                    icon.classList.add('pulse');
-                }
-            }
-            isLikedByMe ? likeBtn.classList.add('liked') : likeBtn.classList.remove('liked');
+    if (currentTool === 'pencil' || currentTool === 'eraser') {
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+    } else if (currentTool === 'line') {
+        ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    } else if (currentTool === 'rect') {
+        ctx.beginPath();
+        ctx.rect(startX, startY, pos.x - startX, pos.y - startY);
+        document.getElementById('tool-texture').value === 'outline' ? ctx.stroke() : ctx.fill();
+    } else if (currentTool === 'circle') {
+        ctx.beginPath();
+        const radius = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
+        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+        document.getElementById('tool-texture').value === 'outline' ? ctx.stroke() : ctx.fill();
+    }
+});
 
-            // === АНИМАЦИЯ КОММЕНТАРИЕВ ===
-            const commentsSection = card.querySelector('.comments-section');
-            const oldCommentsCount = parseInt(commentsSection.dataset.count || 0);
-            
-            if (commentsCount > oldCommentsCount) {
-                // Добавляем только новые комменты с анимацией
-                const existingIds = Array.from(commentsSection.children).map(el => el.dataset.id);
-                Object.entries(commentsObj).forEach(([cId, cData]) => {
-                    if (!existingIds.includes(cId)) {
-                        const cEl = document.createElement('div');
-                        cEl.className = 'comment slide-in-right';
-                        cEl.dataset.id = cId;
-                        cEl.innerHTML = `<span class="comment-author" onclick="viewProfile('${cData.author}')">${cData.author}:</span> ${cData.text}`;
-                        commentsSection.appendChild(cEl);
-                        commentsSection.scrollTop = commentsSection.scrollHeight; // Скролл вниз
-                    }
-                });
-                commentsSection.dataset.count = commentsCount;
-            } else if (commentsCount < oldCommentsCount) {
-                commentsSection.innerHTML = generateCommentsHtml(commentsObj);
-                commentsSection.dataset.count = commentsCount;
-            }
+canvas.addEventListener('pointerup', () => {
+    if(!isDrawing) return;
+    isDrawing = false;
+    saveState();
+});
 
-            // === ПОДДЕРЖАНИЕ СОРТИРОВКИ В DOM ===
-            if (index === 0 && feedContainer.firstElementChild !== card) {
-                feedContainer.prepend(card);
-            }
+// ==========================================
+// 5. СОЦИАЛЬНАЯ СЕТЬ (FIREBASE + DOM DIFFING)
+// ==========================================
 
-        } else {
-            // === СОЗДАНИЕ НОВОЙ КАРТОЧКИ (НОВЫЙ ПОСТ) ===
+// Публикация
+document.getElementById('publish-btn').addEventListener('click', () => {
+    const title = document.getElementById('draw-title').value.trim() || 'Без названия';
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // Сжимаем для Firebase
+    
+    const postRef = db.ref('posts').push();
+    postRef.set({
+        id: postRef.key,
+        title: title,
+        image: dataUrl,
+        author: currentUser.name,
+        authorAvatar: currentUser.avatar,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        likes: {},
+        comments: {}
+    }).then(() => {
+        document.getElementById('draw-title').value = '';
+        document.querySelector('[data-target="feed-view"]').click();
+    });
+});
+
+// Инициализация Real-Time Listeners
+function initFirebaseListeners() {
+    db.ref('posts').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        postsData = data;
+        renderFeed(data);
+        calculateHallOfFame(data);
+    });
+}
+
+// Умный рендеринг ленты (DOM Diffing)
+function renderFeed(data) {
+    const container = document.getElementById('feed-container');
+    const posts = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Удаляем посты, которых больше нет в БД
+    Array.from(container.children).forEach(child => {
+        if(!data[child.dataset.id]) child.remove();
+    });
+
+    posts.forEach(post => {
+        let card = document.getElementById(`post-${post.id}`);
+        const likesCount = post.likes ? Object.keys(post.likes).length : 0;
+        const isLikedByMe = post.likes && post.likes[currentUser.name];
+
+        if (!card) {
             card = document.createElement('div');
-            card.className = 'art-card slide-up'; card.id = `art-${id}`;
-            const isMyPost = art.author === currentUser;
-            const avatar = usersData[art.author]?.avatar || `https://api.dicebear.com/6.x/bottts/svg?seed=${art.author}`;
-
+            card.className = 'post-card glow-box';
+            card.id = `post-${post.id}`;
+            card.dataset.id = post.id;
+            
             card.innerHTML = `
-                <div class="art-header art-info">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <img src="${avatar}" width="30" height="30" style="border-radius:50%; cursor:pointer;" onclick="viewProfile('${art.author}')">
-                        <div>
-                            <div class="art-title">${art.title}</div>
-                            <div class="art-author" onclick="viewProfile('${art.author}')">@${art.author}</div>
-                        </div>
+                <div class="post-header" onclick="openProfile('${post.author}')">
+                    <img src="${post.authorAvatar}" alt="avatar">
+                    <strong class="neon-text">${post.author}</strong>
+                    <span style="margin-left:auto; color:#888; font-size:12px">${new Date(post.timestamp).toLocaleString()}</span>
+                </div>
+                <img src="${post.image}" class="post-image" alt="Art">
+                <div class="post-actions">
+                    <strong>${post.title}</strong>
+                    <div style="display:flex; gap:10px;">
+                        ${post.author === currentUser.name ? 
+                            `<button class="btn btn-small btn-edit" title="Редактировать"><i class="fas fa-edit"></i></button>
+                             <button class="btn btn-small btn-delete" style="background:var(--danger)"><i class="fas fa-trash"></i></button>` : ''}
+                        <button class="like-btn ${isLikedByMe ? 'liked' : ''}" ${post.author === currentUser.name ? 'disabled' : ''}>
+                            <i class="fas fa-heart"></i> <span class="like-count">${likesCount}</span>
+                        </button>
                     </div>
                 </div>
-                <img src="${art.imageUrl}" class="art-image" alt="Art">
-                <div class="art-info">
-                    <div class="art-actions">
-                        <button class="like-btn ${isLikedByMe ? 'liked' : ''}" data-likes="${likesCount}" onclick="toggleLike('${id}')" ${isMyPost ? 'disabled' : ''}>
-                            <i class="fa-solid fa-heart"></i> ${likesCount}
-                        </button>
-                        ${isMyPost ? `<div class="control-btns"><button class="btn-primary" onclick="editArt('${id}', '${art.imageUrl}')"><i class="fa-solid fa-pen"></i></button><button class="btn-danger" onclick="deleteArt('${id}')"><i class="fa-solid fa-trash"></i></button></div>` : ''}
-                    </div>
-                    <div class="comments-section" id="comments-${id}" data-count="${commentsCount}">
-                        ${generateCommentsHtml(commentsObj)}
-                    </div>
+                <div class="post-comments">
+                    <div class="comments-list"></div>
                     <div class="comment-input-wrapper">
-                        <input type="text" id="comment-input-${id}" placeholder="Написать коммент...">
-                        <button class="btn-primary" onclick="addComment('${id}')"><i class="fa-solid fa-paper-plane"></i></button>
+                        <input type="text" class="comment-input" placeholder="Комментарий...">
+                        <button class="btn btn-primary btn-small comment-submit"><i class="fas fa-paper-plane"></i></button>
                     </div>
                 </div>
             `;
             
-            // Вставляем новую карточку сверху ленты
-            if (index === 0) feedContainer.prepend(card);
-            else {
-                const prevCard = document.getElementById(`art-${sortedIds[index-1]}`);
-                if (prevCard) prevCard.after(card);
-                else feedContainer.appendChild(card);
+            if(container.firstChild) {
+                container.insertBefore(card, container.firstChild);
+            } else {
+                container.appendChild(card);
+            }
+
+            // Обработчики
+            card.querySelector('.like-btn').addEventListener('click', () => toggleLike(post.id));
+            
+            const submitComment = () => {
+                const input = card.querySelector('.comment-input');
+                const text = input.value.trim();
+                if(text) {
+                    db.ref(`posts/${post.id}/comments`).push({
+                        author: currentUser.name,
+                        text: text,
+                        timestamp: Date.now()
+                    });
+                    input.value = '';
+                }
+            };
+            card.querySelector('.comment-submit').addEventListener('click', submitComment);
+            card.querySelector('.comment-input').addEventListener('keypress', (e) => e.key === 'Enter' && submitComment());
+
+            if(post.author === currentUser.name) {
+                card.querySelector('.btn-delete').addEventListener('click', () => db.ref(`posts/${post.id}`).remove());
+                card.querySelector('.btn-edit').addEventListener('click', () => {
+                    const img = new Image();
+                    img.src = post.image;
+                    img.onload = () => {
+                        ctx.clearRect(0,0,canvas.width, canvas.height);
+                        ctx.drawImage(img,0,0);
+                        saveState();
+                        document.querySelector('[data-target="draw-view"]').click();
+                    };
+                });
+            }
+        } else {
+            // Diffing для лайков
+            const likeBtn = card.querySelector('.like-btn');
+            const likeCountSpan = card.querySelector('.like-count');
+            
+            if (parseInt(likeCountSpan.textContent) !== likesCount) {
+                likeCountSpan.textContent = likesCount;
+                likeBtn.querySelector('i').classList.remove('anim-pulse');
+                void likeBtn.offsetWidth; 
+                likeBtn.querySelector('i').classList.add('anim-pulse');
             }
             
-            card.querySelector('.comments-section').scrollTop = card.querySelector('.comments-section').scrollHeight;
+            if (isLikedByMe) likeBtn.classList.add('liked');
+            else likeBtn.classList.remove('liked');
+
+            // Diffing для комментариев
+            const commentsList = card.querySelector('.comments-list');
+            const commentsData = post.comments || {};
+            
+            Object.keys(commentsData).forEach(commentId => {
+                if(!document.getElementById(`comment-${commentId}`)) {
+                    const cData = commentsData[commentId];
+                    const cDiv = document.createElement('div');
+                    cDiv.id = `comment-${commentId}`;
+                    cDiv.className = 'comment anim-slide-right';
+                    cDiv.innerHTML = `<strong onclick="openProfile('${cData.author}')">${cData.author}</strong>: ${cData.text}`;
+                    commentsList.appendChild(cDiv);
+                    commentsList.scrollTop = commentsList.scrollHeight;
+                }
+            });
         }
     });
-
-    // Удаляем карточки, удаленные из базы
-    Array.from(feedContainer.children).forEach(card => {
-        if (!data[card.id.replace('art-', '')]) card.remove();
-    });
-
-    drawingsData = data;
-    if(document.getElementById('profile-screen').classList.contains('active')) renderProfile(document.getElementById('profile-nickname').textContent);
-});
-
-function generateCommentsHtml(commentsObj) {
-    if (!commentsObj) return '';
-    return Object.entries(commentsObj).map(([id, c]) => `<div class="comment" data-id="${id}"><span class="comment-author" onclick="viewProfile('${c.author}')">${c.author}:</span> ${c.text}</div>`).join('');
 }
 
-window.toggleLike = function(id) {
-    db.ref(`drawings/${id}`).transaction(post => {
-        if (post && post.author !== currentUser) {
+// Транзакция лайка
+function toggleLike(postId) {
+    const postRef = db.ref(`posts/${postId}`);
+    postRef.transaction((post) => {
+        if (post) {
             if (!post.likes) post.likes = {};
-            post.likes[currentUser] ? post.likes[currentUser] = null : post.likes[currentUser] = true;
+            if (post.likes[currentUser.name]) {
+                delete post.likes[currentUser.name];
+            } else {
+                post.likes[currentUser.name] = true;
+            }
         }
         return post;
     });
-};
-
-window.addComment = function(id) {
-    const input = document.getElementById(`comment-input-${id}`);
-    if (input.value.trim()) {
-        db.ref(`drawings/${id}/comments`).push({ author: currentUser, text: input.value.trim() });
-        input.value = '';
-    }
-};
-
-window.deleteArt = function(id) { if (confirm('Удалить шедевр?')) db.ref(`drawings/${id}`).remove(); };
-
-window.editArt = function(id, imageUrl) {
-    const img = new Image(); img.onload = () => { clearCanvasWhite(); ctx.drawImage(img, 0, 0, canvas.width, canvas.height); switchScreen('draw-screen'); }; img.src = imageUrl;
-};
-
-// 7. ЗАЛ СЛАВЫ И ПРОФИЛЬ
-function renderHallOfFame() {
-    const userLikesCount = {};
-    Object.values(drawingsData).forEach(art => {
-        if (!userLikesCount[art.author]) userLikesCount[art.author] = 0;
-        if (art.likes) userLikesCount[art.author] += Object.keys(art.likes).length;
-    });
-    const topUsers = Object.keys(usersData).map(nick => ({ nickname: nick, avatar: usersData[nick].avatar, likes: userLikesCount[nick] || 0 })).sort((a, b) => b.likes - a.likes).slice(0, 10);
-    hallContainer.innerHTML = topUsers.map((u, i) => `<div class="hall-card rank-${i + 1}" onclick="viewProfile('${u.nickname}')"><div class="hall-rank">#${i + 1}</div><img src="${u.avatar}" class="hall-avatar" alt="Avatar"><div class="hall-info"><h3 class="neon-text">${u.nickname}</h3></div><div class="hall-likes"><i class="fa-solid fa-heart"></i> ${u.likes}</div></div>`).join('');
 }
 
-function renderProfile(nicknameTarget) {
-    const target = nicknameTarget || currentUser;
-    document.getElementById('change-avatar-btn').style.display = target === currentUser ? 'flex' : 'none';
-    document.getElementById('profile-gallery-title').textContent = target === currentUser ? 'Мои работы' : `Работы пользователя: ${target}`;
+// Зал Славы
+function calculateHallOfFame(posts) {
+    const userLikes = {};
+    Object.values(posts).forEach(post => {
+        const likes = post.likes ? Object.keys(post.likes).length : 0;
+        if(!userLikes[post.author]) userLikes[post.author] = { name: post.author, avatar: post.authorAvatar, total: 0 };
+        userLikes[post.author].total += likes;
+    });
 
-    const userDrawings = Object.keys(drawingsData).filter(id => drawingsData[id].author === target).sort((a, b) => drawingsData[b].timestamp - drawingsData[a].timestamp);
-
-    let totalLikes = 0;
-    profileGallery.innerHTML = userDrawings.map(id => {
-        const art = drawingsData[id];
-        const likesCount = art.likes ? Object.keys(art.likes).length : 0;
-        totalLikes += likesCount;
-        return `<div class="art-card"><img src="${art.imageUrl}" class="art-image" alt="Art"><div cla
+    const sortedUsers = Object.values(userLikes).sort((a, b) => b.total - a.total).slice(0, 10);
+    
+    sortedUsers.forEach(u => {
+        if(!usersData[u.name]) usersData[u.name] = { ...u };
+        usersData[u
