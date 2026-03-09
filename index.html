@@ -4,18 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BitPaint - Neon Cyberpunk Art</title>
-    <!-- Шрифты и иконки -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Firebase Compat v8 -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 
-    <!-- Экран авторизации -->
     <div id="auth-screen" class="screen active">
         <div class="auth-card glow-panel">
             <h1 class="neon-text">BitPaint</h1>
@@ -25,7 +21,6 @@
         </div>
     </div>
 
-    <!-- Шапка приложения -->
     <header id="app-header" class="hidden">
         <div class="logo neon-text">BitPaint</div>
         <nav class="nav-links">
@@ -33,34 +28,44 @@
             <button class="nav-btn" data-target="draw-screen"><i class="fa-solid fa-palette"></i> Рисовать</button>
             <button class="nav-btn" data-target="hall-screen"><i class="fa-solid fa-trophy"></i> Зал Славы</button>
         </nav>
-        <div class="user-profile-mini" id="nav-profile-btn" data-target="profile-screen">
-            <img src="https://api.dicebear.com/6.x/bottts/svg?seed=Guest" id="header-avatar" alt="Avatar">
+        <div class="user-profile-mini" id="nav-profile-btn" onclick="viewProfile(currentUser)">
+            <img src="" id="header-avatar" alt="Avatar">
             <span id="header-nickname">User</span>
         </div>
     </header>
 
-    <!-- Главный экран (Лента) -->
     <div id="main-screen" class="screen hidden with-header">
         <div class="container">
-            <div id="feed-container" class="grid-container">
-                <!-- Карточки будут рендериться здесь -->
-            </div>
+            <div id="feed-container" class="grid-container"></div>
         </div>
     </div>
 
-    <!-- Экран рисования -->
     <div id="draw-screen" class="screen hidden with-header">
         <div class="container draw-container">
             <div class="toolbar glow-panel">
-                <input type="color" id="color-picker" value="#000000">
+                <button id="undo-btn" class="btn-secondary" title="Шаг назад"><i class="fa-solid fa-rotate-left"></i></button>
+                <input type="color" id="color-picker" value="#b967ff">
                 <input type="range" id="brush-size" min="1" max="50" value="5">
+                
+                <label class="neon-checkbox">
+                    <input type="checkbox" id="neon-toggle"> Неон
+                </label>
+
+                <select id="shape-fill" title="Стиль фигур">
+                    <option value="none">Контур</option>
+                    <option value="solid">Заливка цветом</option>
+                    <option value="wood">Текстура: Дерево</option>
+                    <option value="brick">Текстура: Кирпич</option>
+                </select>
+
                 <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fa-solid fa-pencil"></i></button>
+                <button class="tool-btn" data-tool="bucket" title="Умная заливка"><i class="fa-solid fa-fill-drip"></i></button>
                 <button class="tool-btn" data-tool="line" title="Линия"><i class="fa-solid fa-minus"></i></button>
                 <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="fa-regular fa-square"></i></button>
                 <button class="tool-btn" data-tool="circle" title="Круг"><i class="fa-regular fa-circle"></i></button>
                 <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fa-solid fa-eraser"></i></button>
                 <button class="tool-btn" data-tool="picker" title="Пипетка"><i class="fa-solid fa-eye-dropper"></i></button>
-                <button id="clear-canvas" class="btn-danger" title="Очистить"><i class="fa-solid fa-trash"></i></button>
+                <button id="clear-canvas" class="btn-danger" title="Очистить всё"><i class="fa-solid fa-trash"></i></button>
             </div>
             <div class="canvas-wrapper">
                 <canvas id="paint-canvas" width="1280" height="720"></canvas>
@@ -72,17 +77,13 @@
         </div>
     </div>
 
-    <!-- Зал Славы -->
     <div id="hall-screen" class="screen hidden with-header">
         <div class="container">
             <h2 class="neon-text text-center"><i class="fa-solid fa-crown"></i> Зал Славы</h2>
-            <div id="hall-container" class="list-container">
-                <!-- Топ пользователи -->
-            </div>
+            <div id="hall-container" class="list-container"></div>
         </div>
     </div>
 
-    <!-- Профиль -->
     <div id="profile-screen" class="screen hidden with-header">
         <div class="container">
             <div class="profile-header glow-panel">
@@ -95,10 +96,8 @@
                     <p><i class="fa-solid fa-heart"></i> Всего лайков: <span id="profile-likes">0</span></p>
                 </div>
             </div>
-            <h3 class="neon-text">Мои работы</h3>
-            <div id="profile-gallery" class="grid-container">
-                <!-- Работы пользователя -->
-            </div>
+            <h3 class="neon-text" id="profile-gallery-title">Работы</h3>
+            <div id="profile-gallery" class="grid-container"></div>
         </div>
     </div>
 
