@@ -1,503 +1,406 @@
-// ==========================================
-// 1. FIREBASE ИНИЦИАЛИЗАЦИЯ (Твои ключи успешно интегрированы)
-// ==========================================
+// === 1. ИНИЦИАЛИЗАЦИЯ FIREBASE ===
+// ВАЖНО: Вставьте сюда данные вашего проекта Firebase Realtime Database
 const firebaseConfig = {
-    apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
-    authDomain: "bitpaint-f7dbd.firebaseapp.com",
-    databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com",
-    projectId: "bitpaint-f7dbd",
-    storageBucket: "bitpaint-f7dbd.firebasestorage.app",
-    messagingSenderId: "193627137592",
-    appId: "1:193627137592:web:4f3835e21c0adf024468cd",
-    measurementId: "G-2JR3GPQ60R"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    databaseURL: "YOUR_DATABASE_URL", // Обязательно для Realtime DB
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
-// Инициализируем Firebase
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.database();
 
-// ==========================================
-// 2. ГЛОБАЛЬНОЕ СОСТОЯНИЕ
-// ==========================================
-let currentUser = null;
-let postsData = {}; 
-let usersData = {};
-
-// ==========================================
-// 3. АВТОРИЗАЦИЯ И НАВИГАЦИЯ
-// ==========================================
-const authScreen = document.getElementById('auth-screen');
-const appScreen = document.getElementById('app-screen');
-const authBtn = document.getElementById('auth-btn');
-const authNickname = document.getElementById('auth-nickname');
-
-function generateAvatar(name) {
-    return `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}&backgroundColor=1a1a2e`;
-}
-
-function login(nickname) {
-    if(nickname.length < 3) return alert('Никнейм от 3 символов!');
-    currentUser = {
-        name: nickname,
-        avatar: localStorage.getItem(`avatar_${nickname}`) || generateAvatar(nickname)
-    };
-    localStorage.setItem('bitpaint_user', nickname);
+// === 2. ЯДРО ПРИЛОЖЕНИЯ И АВТОРИЗАЦИЯ ===
+const app = {
+    currentUser: null,
+    usersCache: {},
     
-    // Сохраняем/обновляем юзера в БД для зала славы
-    db.ref(`users/${nickname}`).update({ name: nickname, avatar: currentUser.avatar });
-
-    document.getElementById('nav-username').textContent = currentUser.name;
-    document.getElementById('nav-avatar').src = currentUser.avatar;
-    
-    authScreen.classList.remove('active');
-    appScreen.classList.add('active');
-    initFirebaseListeners();
-}
-
-authBtn.addEventListener('click', () => login(authNickname.value.trim()));
-if(localStorage.getItem('bitpaint_user')) {
-    login(localStorage.getItem('bitpaint_user'));
-}
-
-// Навигация
-document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        document.getElementById(e.currentTarget.dataset.target).classList.add('active');
-    });
-});
-
-// Открытие профиля
-document.getElementById('my-profile-btn').addEventListener('click', () => openProfile(currentUser.name));
-
-function openProfile(username) {
-    const user = usersData[username] || { name: username, avatar: generateAvatar(username), totalLikes: 0 };
-    document.getElementById('profile-name').textContent = user.name;
-    document.getElementById('profile-avatar').src = user.avatar;
-    document.getElementById('profile-likes').textContent = user.totalLikes || 0;
-    
-    const changeBtn = document.getElementById('change-avatar-btn');
-    if(username === currentUser.name) {
-        changeBtn.style.display = 'block';
-        changeBtn.onclick = () => {
-            const newUrl = prompt('Введите URL новой аватарки (прямую ссылку на картинку):');
-            if(newUrl) {
-                currentUser.avatar = newUrl;
-                localStorage.setItem(`avatar_${username}`, newUrl);
-                document.getElementById('profile-avatar').src = newUrl;
-                document.getElementById('nav-avatar').src = newUrl;
-                db.ref(`users/${username}`).update({ avatar: newUrl });
-            }
-        };
-    } else {
-        changeBtn.style.display = 'none';
-    }
-
-    // Рендер галереи пользователя
-    const gallery = document.getElementById('profile-gallery');
-    gallery.innerHTML = '';
-    Object.values(postsData).filter(p => p.author === username).forEach(post => {
-        const img = document.createElement('img');
-        img.src = post.image;
-        img.className = 'post-image glow-box';
-        img.style.cursor = 'pointer';
-        img.onclick = () => { document.querySelector('[data-target="feed-view"]').click(); };
-        gallery.appendChild(img);
-    });
-
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('profile-view').classList.add('active');
-}
-
-// ==========================================
-// 4. ДВИЖОК РИСОВАНИЯ (CANVAS API)
-// ==========================================
-const canvas = document.getElementById('main-canvas');
-const ctx = canvas.getContext('2d', { willReadFrequently: true });
-let isDrawing = false, startX = 0, startY = 0, snapshot;
-let undoStack = [];
-let currentTool = 'pencil';
-
-// Инициализация холста (белый фон)
-function clearCanvas() {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    saveState();
-}
-if(undoStack.length === 0) clearCanvas();
-
-// Сохранение состояния (до 20 шагов)
-function saveState() {
-    if (undoStack.length >= 20) undoStack.shift();
-    undoStack.push(canvas.toDataURL());
-}
-
-document.getElementById('tool-undo').addEventListener('click', () => {
-    if(undoStack.length > 1) {
-        undoStack.pop(); // удаляем текущее
-        const imgData = undoStack[undoStack.length - 1];
-        const img = new Image();
-        img.src = imgData;
-        img.onload = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-        };
-    } else if(undoStack.length === 1) {
-        clearCanvas();
-    }
-});
-
-// Инструменты
-document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        currentTool = e.currentTarget.dataset.tool;
-    });
-});
-
-// Генерация текстур
-function getFillStyle(color) {
-    const type = document.getElementById('tool-texture').value;
-    if (type === 'fill' || type === 'outline') return color;
-    
-    const patCanvas = document.createElement('canvas');
-    const pCtx = patCanvas.getContext('2d');
-    patCanvas.width = 20; patCanvas.height = 20;
-    pCtx.fillStyle = color;
-    pCtx.fillRect(0, 0, 20, 20);
-    pCtx.strokeStyle = '#000';
-    pCtx.lineWidth = 2;
-
-    if (type === 'wood') {
-        pCtx.beginPath();
-        for(let i=0; i<5; i++) {
-            pCtx.moveTo(0, Math.random()*20);
-            pCtx.bezierCurveTo(5, Math.random()*20, 15, Math.random()*20, 20, Math.random()*20);
+    init() {
+        const savedUser = localStorage.getItem('bitpaint_user');
+        if (savedUser) {
+            this.currentUser = savedUser;
+            this.navigate('main-screen');
+            this.loadUserData();
+            this.listenToFeed();
+        } else {
+            this.navigate('auth-screen');
         }
-        pCtx.stroke();
-    } else if (type === 'brick') {
-        pCtx.strokeRect(0, 0, 20, 10);
-        pCtx.strokeRect(-10, 10, 20, 10);
-        pCtx.strokeRect(10, 10, 20, 10);
-    }
-    return ctx.createPattern(patCanvas, 'repeat');
-}
+    },
 
-// Умная заливка (Flood Fill - Iterative)
-function floodFill(startX, startY, fillColorHex) {
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imgData.data;
-    
-    const getPixelIdx = (x, y) => (y * canvas.width + x) * 4;
-    const startIdx = getPixelIdx(startX, startY);
-    const startR = data[startIdx], startG = data[startIdx+1], startB = data[startIdx+2], startA = data[startIdx+3];
-    
-    // Преобразуем hex в rgb
-    const hex = fillColorHex.replace('#','');
-    const fillR = parseInt(hex.substring(0,2), 16), fillG = parseInt(hex.substring(2,4), 16), fillB = parseInt(hex.substring(4,6), 16);
-
-    if(startR === fillR && startG === fillG && startB === fillB) return; // Тот же цвет
-
-    const matchStartColor = (idx) => data[idx] === startR && data[idx+1] === startG && data[idx+2] === startB && data[idx+3] === startA;
-    const colorPixel = (idx) => { data[idx] = fillR; data[idx+1] = fillG; data[idx+2] = fillB; data[idx+3] = 255; };
-
-    const pixelStack = [[startX, startY]];
-    
-    while(pixelStack.length) {
-        let newPos = pixelStack.pop();
-        let x = newPos[0], y = newPos[1];
-        let pixelPos = getPixelIdx(x, y);
+    login() {
+        const nickname = document.getElementById('login-nickname').value.trim();
+        if (nickname.length < 3) return alert('Никнейм должен быть от 3 символов!');
         
-        while(y-- >= 0 && matchStartColor(pixelPos)) pixelPos -= canvas.width * 4;
-        pixelPos += canvas.width * 4; ++y;
+        this.currentUser = nickname;
+        localStorage.setItem('bitpaint_user', nickname);
         
-        let reachLeft = false, reachRight = false;
-        while(y++ < canvas.height-1 && matchStartColor(pixelPos)) {
-            colorPixel(pixelPos);
-            if(x > 0) {
-                if(matchStartColor(pixelPos - 4)) {
-                    if(!reachLeft) { pixelStack.push([x - 1, y]); reachLeft = true; }
-                } else if(reachLeft) reachLeft = false;
+        // Создаем юзера в БД, если его нет
+        db.ref('users/' + nickname).once('value', snap => {
+            if (!snap.exists()) {
+                db.ref('users/' + nickname).set({ avatar: 'https://via.placeholder.com/100', totalLikes: 0 });
             }
-            if(x < canvas.width - 1) {
-                if(matchStartColor(pixelPos + 4)) {
-                    if(!reachRight) { pixelStack.push([x + 1, y]); reachRight = true; }
-                } else if(reachRight) reachRight = false;
+        });
+
+        this.navigate('main-screen');
+        this.loadUserData();
+        this.listenToFeed();
+    },
+
+    logout() {
+        localStorage.removeItem('bitpaint_user');
+        this.currentUser = null;
+        this.navigate('auth-screen');
+    },
+
+    navigate(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+        document.getElementById(screenId).classList.remove('hidden');
+        
+        const header = document.getElementById('main-header');
+        screenId === 'auth-screen' ? header.classList.add('hidden') : header.classList.remove('hidden');
+
+        if (screenId === 'draw-screen') canvasApp.initCanvas();
+        if (screenId === 'hall-screen') this.renderHallOfFame();
+        if (screenId === 'profile-screen') this.renderProfile();
+    },
+
+    loadUserData() {
+        document.getElementById('header-username').innerText = this.currentUser;
+        db.ref('users').on('value', snap => {
+            this.usersCache = snap.val() || {};
+            const me = this.usersCache[this.currentUser];
+            if (me && me.avatar) {
+                document.getElementById('header-avatar').src = me.avatar;
+                document.getElementById('profile-avatar').src = me.avatar;
             }
-            pixelPos += canvas.width * 4;
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
-}
+        });
+    },
 
-// Pointer Events
-const getPointerPos = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
-};
+    updateAvatar() {
+        const url = document.getElementById('avatar-url-input').value.trim();
+        if (!url) return;
+        db.ref('users/' + this.currentUser).update({ avatar: url });
+        document.getElementById('avatar-url-input').value = '';
+    },
 
-const setupCtx = () => {
-    const color = document.getElementById('tool-color').value;
-    ctx.lineWidth = document.getElementById('tool-size').value;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : color;
-    ctx.fillStyle = currentTool === 'eraser' ? '#ffffff' : getFillStyle(color);
+    // === 3. УМНЫЙ РЕНДЕРИНГ И ЛЕНТА ===
+    postsData: [],
     
-    if(document.getElementById('tool-neon').checked && currentTool !== 'eraser') {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = color;
-    } else {
-        ctx.shadowBlur = 0;
-    }
-};
+    listenToFeed() {
+        db.ref('posts').on('value', snapshot => {
+            const posts = [];
+            snapshot.forEach(child => { posts.push({ id: child.key, ...child.val() }); });
+            this.postsData = posts.reverse(); // Новые сверху
+            this.smartRenderFeed();
+        });
+    },
 
-canvas.addEventListener('pointerdown', (e) => {
-    isDrawing = true;
-    const pos = getPointerPos(e);
-    startX = pos.x; startY = pos.y;
-    setupCtx();
+    smartRenderFeed() {
+        const container = document.getElementById('feed-container');
+        const renderedIds = new Set();
 
-    if(currentTool === 'bucket') {
-        floodFill(Math.floor(startX), Math.floor(startY), document.getElementById('tool-color').value);
-        saveState();
-        isDrawing = false;
-        return;
-    }
-
-    if(currentTool === 'eyedropper') {
-        const p = ctx.getImageData(startX, startY, 1, 1).data;
-        const hex = "#" + ("000000" + ((p[0] << 16) | (p[1] << 8) | p[2]).toString(16)).slice(-6);
-        document.getElementById('tool-color').value = hex;
-        document.querySelector('[data-tool="pencil"]').click();
-        isDrawing = false;
-        return;
-    }
-
-    snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    e.preventDefault(); // Защита от скролла на тачах
-});
-
-canvas.addEventListener('pointermove', (e) => {
-    if (!isDrawing) return;
-    const pos = getPointerPos(e);
-    
-    if (['line', 'rect', 'circle'].includes(currentTool)) {
-        ctx.putImageData(snapshot, 0, 0);
-    }
-
-    if (currentTool === 'pencil' || currentTool === 'eraser') {
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-    } else if (currentTool === 'line') {
-        ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(pos.x, pos.y); ctx.stroke();
-    } else if (currentTool === 'rect') {
-        ctx.beginPath();
-        ctx.rect(startX, startY, pos.x - startX, pos.y - startY);
-        document.getElementById('tool-texture').value === 'outline' ? ctx.stroke() : ctx.fill();
-    } else if (currentTool === 'circle') {
-        ctx.beginPath();
-        const radius = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-        document.getElementById('tool-texture').value === 'outline' ? ctx.stroke() : ctx.fill();
-    }
-});
-
-canvas.addEventListener('pointerup', () => {
-    if(!isDrawing) return;
-    isDrawing = false;
-    saveState();
-});
-
-// ==========================================
-// 5. СОЦИАЛЬНАЯ СЕТЬ (FIREBASE + DOM DIFFING)
-// ==========================================
-
-// Публикация
-document.getElementById('publish-btn').addEventListener('click', () => {
-    const title = document.getElementById('draw-title').value.trim() || 'Без названия';
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // Сжимаем для Firebase
-    
-    const postRef = db.ref('posts').push();
-    postRef.set({
-        id: postRef.key,
-        title: title,
-        image: dataUrl,
-        author: currentUser.name,
-        authorAvatar: currentUser.avatar,
-        timestamp: firebase.database.ServerValue.TIMESTAMP,
-        likes: {},
-        comments: {}
-    }).then(() => {
-        document.getElementById('draw-title').value = '';
-        document.querySelector('[data-target="feed-view"]').click();
-    });
-});
-
-// Инициализация Real-Time Listeners
-function initFirebaseListeners() {
-    db.ref('posts').on('value', (snapshot) => {
-        const data = snapshot.val() || {};
-        postsData = data;
-        renderFeed(data);
-        calculateHallOfFame(data);
-    });
-}
-
-// Умный рендеринг ленты (DOM Diffing)
-function renderFeed(data) {
-    const container = document.getElementById('feed-container');
-    const posts = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
-    
-    // Удаляем посты, которых больше нет в БД
-    Array.from(container.children).forEach(child => {
-        if(!data[child.dataset.id]) child.remove();
-    });
-
-    posts.forEach(post => {
-        let card = document.getElementById(`post-${post.id}`);
-        const likesCount = post.likes ? Object.keys(post.likes).length : 0;
-        const isLikedByMe = post.likes && post.likes[currentUser.name];
-
-        if (!card) {
-            card = document.createElement('div');
-            card.className = 'post-card glow-box';
-            card.id = `post-${post.id}`;
-            card.dataset.id = post.id;
+        this.postsData.forEach(post => {
+            renderedIds.add(post.id);
+            let card = document.getElementById(`post-${post.id}`);
             
-            card.innerHTML = `
-                <div class="post-header" onclick="openProfile('${post.author}')">
-                    <img src="${post.authorAvatar}" alt="avatar">
-                    <strong class="neon-text">${post.author}</strong>
-                    <span style="margin-left:auto; color:#888; font-size:12px">${new Date(post.timestamp).toLocaleString()}</span>
-                </div>
-                <img src="${post.image}" class="post-image" alt="Art">
-                <div class="post-actions">
-                    <strong>${post.title}</strong>
-                    <div style="display:flex; gap:10px;">
-                        ${post.author === currentUser.name ? 
-                            `<button class="btn btn-small btn-edit" title="Редактировать"><i class="fas fa-edit"></i></button>
-                             <button class="btn btn-small btn-delete" style="background:var(--danger)"><i class="fas fa-trash"></i></button>` : ''}
-                        <button class="like-btn ${isLikedByMe ? 'liked' : ''}" ${post.author === currentUser.name ? 'disabled' : ''}>
-                            <i class="fas fa-heart"></i> <span class="like-count">${likesCount}</span>
+            const authorAvatar = this.usersCache[post.author]?.avatar || 'https://via.placeholder.com/40';
+            const isMe = post.author === this.currentUser;
+            const hasLiked = post.likedBy && post.likedBy[this.currentUser];
+            const likesCount = post.likes || 0;
+
+            if (!card) {
+                // Создание новой карточки (с анимацией)
+                card = document.createElement('div');
+                card.id = `post-${post.id}`;
+                card.className = 'post-card neon-card slide-up';
+                
+                card.innerHTML = `
+                    <div class="post-header">
+                        <div class="post-author">
+                            <img src="${authorAvatar}" class="author-avatar" alt="av">
+                            <span>${post.author}</span>
+                        </div>
+                        ${isMe ? `<div>
+                            <button onclick="app.editPost('${post.id}')" class="neon-btn" style="padding: 5px 10px; font-size: 0.8rem;"><i class="fas fa-edit"></i></button>
+                            <button onclick="app.deletePost('${post.id}')" class="neon-btn" style="padding: 5px 10px; font-size: 0.8rem; border-color: red; color: red;"><i class="fas fa-trash"></i></button>
+                        </div>` : ''}
+                    </div>
+                    <div class="post-title">${post.title || 'Без названия'}</div>
+                    <img src="${post.image}" class="post-img" alt="art">
+                    <div class="post-actions">
+                        <button class="like-btn ${hasLiked ? 'liked' : ''}" ${isMe ? 'disabled' : ''} onclick="app.toggleLike('${post.id}')">
+                            <i class="fas fa-heart"></i> <span class="likes-count">${likesCount}</span>
                         </button>
                     </div>
-                </div>
-                <div class="post-comments">
-                    <div class="comments-list"></div>
-                    <div class="comment-input-wrapper">
-                        <input type="text" class="comment-input" placeholder="Комментарий...">
-                        <button class="btn btn-primary btn-small comment-submit"><i class="fas fa-paper-plane"></i></button>
+                    <div class="comments-section" id="comments-${post.id}"></div>
+                    <div class="comment-box">
+                        <input type="text" id="comment-input-${post.id}" class="comment-input" placeholder="Написать комментарий...">
+                        <button onclick="app.addComment('${post.id}')" class="neon-btn" style="padding: 10px;"><i class="fas fa-paper-plane"></i></button>
                     </div>
+                `;
+                container.appendChild(card);
+            } else {
+                // Точечное обновление существующей карточки
+                const likesSpan = card.querySelector('.likes-count');
+                const likeBtn = card.querySelector('.like-btn');
+                
+                if (parseInt(likesSpan.innerText) !== likesCount) {
+                    likesSpan.innerText = likesCount;
+                    likeBtn.className = `like-btn ${hasLiked ? 'liked' : ''}`;
+                    // Анимация пульса
+                    const icon = likeBtn.querySelector('i');
+                    icon.classList.remove('pulse');
+                    void icon.offsetWidth; // trigger reflow
+                    icon.classList.add('pulse');
+                }
+            }
+
+            // Рендер комментариев
+            const commentsContainer = document.getElementById(`comments-${post.id}`);
+            const commentsHtml = post.comments ? Object.values(post.comments).map(c => 
+                `<div class="comment"><strong>${c.author}:</strong> ${c.text}</div>`
+            ).join('') : '';
+            if (commentsContainer.innerHTML !== commentsHtml) {
+                commentsContainer.innerHTML = commentsHtml;
+            }
+        });
+
+        // Удаление удаленных постов из DOM
+        Array.from(container.children).forEach(child => {
+            const id = child.id.replace('post-', '');
+            if (!renderedIds.has(id)) child.remove();
+        });
+    },
+
+    toggleLike(postId) {
+        const postRef = db.ref(`posts/${postId}`);
+        postRef.transaction(post => {
+            if (post) {
+                if (!post.likedBy) post.likedBy = {};
+                if (post.likedBy[this.currentUser]) {
+                    post.likes--;
+                    delete post.likedBy[this.currentUser];
+                } else {
+                    post.likes++;
+                    post.likedBy[this.currentUser] = true;
+                }
+            }
+            return post;
+        });
+    },
+
+    addComment(postId) {
+        const input = document.getElementById(`comment-input-${postId}`);
+        const text = input.value.trim();
+        if (!text) return;
+        
+        db.ref(`posts/${postId}/comments`).push({
+            author: this.currentUser,
+            text: text,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+        input.value = '';
+    },
+
+    deletePost(postId) {
+        if(confirm('Точно удалить этот арт?')) db.ref(`posts/${postId}`).remove();
+    },
+
+    editPost(postId) {
+        const post = this.postsData.find(p => p.id === postId);
+        if(!post) return;
+        this.navigate('draw-screen');
+        
+        const img = new Image();
+        img.onload = () => {
+            canvasApp.initCanvas();
+            canvasApp.ctx.drawImage(img, 0, 0, canvasApp.canvas.width, canvasApp.canvas.height);
+        };
+        img.src = post.image;
+        document.getElementById('art-title').value = post.title;
+    },
+
+    // === 4. ЗАЛ СЛАВЫ И ПРОФИЛЬ ===
+    renderHallOfFame() {
+        const userLikes = {};
+        this.postsData.forEach(p => {
+            if (!userLikes[p.author]) userLikes[p.author] = 0;
+            userLikes[p.author] += (p.likes || 0);
+        });
+
+        const sortedUsers = Object.keys(userLikes)
+            .map(name => ({ name, likes: userLikes[name], avatar: this.usersCache[name]?.avatar || 'https://via.placeholder.com/50' }))
+            .sort((a, b) => b.likes - a.likes)
+            .slice(0, 10);
+
+        const container = document.getElementById('hall-container');
+        container.innerHTML = sortedUsers.map((u, i) => {
+            let rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+            return `
+                <div class="rank-card neon-card ${rankClass}">
+                    <span>#${i + 1}</span>
+                    <div class="rank-info">
+                        <img src="${u.avatar}" alt="av">
+                        <span>${u.name}</span>
+                    </div>
+                    <span><i class="fas fa-heart"></i> ${u.likes}</span>
                 </div>
             `;
-            
-            if(container.firstChild) {
-                container.insertBefore(card, container.firstChild);
-            } else {
-                container.appendChild(card);
-            }
+        }).join('');
+    },
 
-            // Обработчики
-            card.querySelector('.like-btn').addEventListener('click', () => toggleLike(post.id));
-            
-            const submitComment = () => {
-                const input = card.querySelector('.comment-input');
-                const text = input.value.trim();
-                if(text) {
-                    db.ref(`posts/${post.id}/comments`).push({
-                        author: currentUser.name,
-                        text: text,
-                        timestamp: Date.now()
-                    });
-                    input.value = '';
-                }
-            };
-            card.querySelector('.comment-submit').addEventListener('click', submitComment);
-            card.querySelector('.comment-input').addEventListener('keypress', (e) => e.key === 'Enter' && submitComment());
+    renderProfile() {
+        document.getElementById('profile-name').innerText = this.currentUser;
+        
+        const myPosts = this.postsData.filter(p => p.author === this.currentUser);
+        const totalLikes = myPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
+        document.getElementById('profile-likes-total').innerText = totalLikes;
 
-            if(post.author === currentUser.name) {
-                card.querySelector('.btn-delete').addEventListener('click', () => db.ref(`posts/${post.id}`).remove());
-                card.querySelector('.btn-edit').addEventListener('click', () => {
-                    const img = new Image();
-                    img.src = post.image;
-                    img.onload = () => {
-                        ctx.clearRect(0,0,canvas.width, canvas.height);
-                        ctx.drawImage(img,0,0);
-                        saveState();
-                        document.querySelector('[data-target="draw-view"]').click();
-                    };
-                });
-            }
+        const grid = document.getElementById('profile-grid');
+        grid.innerHTML = myPosts.map(post => `
+            <div class="post-card neon-card">
+                <div class="post-title">${post.title}</div>
+                <img src="${post.image}" class="post-img" alt="art">
+                <div style="margin-top:10px;"><i class="fas fa-heart" style="color:var(--heart-color)"></i> ${post.likes || 0}</div>
+            </div>
+        `).join('');
+    }
+};
+
+// === 5. ДВИЖОК РИСОВАНИЯ (CANVAS API) ===
+const canvasApp = {
+    canvas: null,
+    ctx: null,
+    isDrawing: false,
+    tool: 'pencil',
+    startX: 0, startY: 0,
+    savedImage: null,
+
+    initCanvas() {
+        this.canvas = document.getElementById('paint-canvas');
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        
+        const wrapper = document.getElementById('canvas-wrapper');
+        // Жесткое соотношение 16:9 для внутренних пикселей
+        this.canvas.width = wrapper.clientWidth;
+        this.canvas.height = wrapper.clientWidth * (9 / 16);
+
+        // Жесткая белая заливка фона
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Привязка событий (с поддержкой Touch)
+        this.canvas.onmousedown = this.startPos.bind(this);
+        this.canvas.onmousemove = this.draw.bind(this);
+        window.onmouseup = this.endPos.bind(this);
+
+        this.canvas.ontouchstart = (e) => { e.preventDefault(); this.startPos(e.touches[0]); };
+        this.canvas.ontouchmove = (e) => { e.preventDefault(); this.draw(e.touches[0]); };
+        window.ontouchend = this.endPos.bind(this);
+    },
+
+    setTool(newTool) {
+        this.tool = newTool;
+        document.querySelectorAll('.tools button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`tool-${newTool}`).classList.add('active');
+    },
+
+    getPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
+            y: (e.clientY - rect.top) * (this.canvas.height / rect.height)
+        };
+    },
+
+    startPos(e) {
+        this.isDrawing = true;
+        const pos = this.getPos(e);
+        this.startX = pos.x;
+        this.startY = pos.y;
+        
+        if (this.tool === 'eyedropper') {
+            this.pickColor(pos.x, pos.y);
+            this.isDrawing = false;
+            return;
+        }
+
+        // Сохраняем стейт канваса для геометрических фигур
+        this.savedImage = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.ctx.beginPath();
+        if (this.tool === 'pencil' || this.tool === 'eraser') {
+            this.ctx.moveTo(this.startX, this.startY);
+        }
+    },
+
+    draw(e) {
+        if (!this.isDrawing) return;
+        const pos = this.getPos(e);
+        
+        this.ctx.lineWidth = document.getElementById('line-width').value;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        
+        if (this.tool === 'pencil' || this.tool === 'eraser') {
+            this.ctx.strokeStyle = this.tool === 'eraser' ? '#ffffff' : document.getElementById('color-picker').value;
+            this.ctx.lineTo(pos.x, pos.y);
+            this.ctx.stroke();
         } else {
-            // Diffing для лайков
-            const likeBtn = card.querySelector('.like-btn');
-            const likeCountSpan = card.querySelector('.like-count');
-            
-            if (parseInt(likeCountSpan.textContent) !== likesCount) {
-                likeCountSpan.textContent = likesCount;
-                likeBtn.querySelector('i').classList.remove('anim-pulse');
-                void likeBtn.offsetWidth; 
-                likeBtn.querySelector('i').classList.add('anim-pulse');
+            // Восстанавливаем сохраненный холст перед отрисовкой фигуры для превью
+            this.ctx.putImageData(this.savedImage, 0, 0);
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = document.getElementById('color-picker').value;
+
+            if (this.tool === 'line') {
+                this.ctx.moveTo(this.startX, this.startY);
+                this.ctx.lineTo(pos.x, pos.y);
+            } else if (this.tool === 'rect') {
+                this.ctx.rect(this.startX, this.startY, pos.x - this.startX, pos.y - this.startY);
+            } else if (this.tool === 'circle') {
+                const radius = Math.sqrt(Math.pow(pos.x - this.startX, 2) + Math.pow(pos.y - this.startY, 2));
+                // БАГФИКС: moveTo на край радиуса перед arc()
+                this.ctx.moveTo(this.startX + radius, this.startY); 
+                this.ctx.arc(this.startX, this.startY, radius, 0, Math.PI * 2);
             }
-            
-            if (isLikedByMe) likeBtn.classList.add('liked');
-            else likeBtn.classList.remove('liked');
-
-            // Diffing для комментариев
-            const commentsList = card.querySelector('.comments-list');
-            const commentsData = post.comments || {};
-            
-            Object.keys(commentsData).forEach(commentId => {
-                if(!document.getElementById(`comment-${commentId}`)) {
-                    const cData = commentsData[commentId];
-                    const cDiv = document.createElement('div');
-                    cDiv.id = `comment-${commentId}`;
-                    cDiv.className = 'comment anim-slide-right';
-                    cDiv.innerHTML = `<strong onclick="openProfile('${cData.author}')">${cData.author}</strong>: ${cData.text}`;
-                    commentsList.appendChild(cDiv);
-                    commentsList.scrollTop = commentsList.scrollHeight;
-                }
-            });
+            this.ctx.stroke();
         }
-    });
-}
+    },
 
-// Транзакция лайка
-function toggleLike(postId) {
-    const postRef = db.ref(`posts/${postId}`);
-    postRef.transaction((post) => {
-        if (post) {
-            if (!post.likes) post.likes = {};
-            if (post.likes[currentUser.name]) {
-                delete post.likes[currentUser.name];
-            } else {
-                post.likes[currentUser.name] = true;
-            }
-        }
-        return post;
-    });
-}
+    endPos() {
+        this.isDrawing = false;
+        this.ctx.beginPath();
+    },
 
-// Зал Славы
-function calculateHallOfFame(posts) {
-    const userLikes = {};
-    Object.values(posts).forEach(post => {
-        const likes = post.likes ? Object.keys(post.likes).length : 0;
-        if(!userLikes[post.author]) userLikes[post.author] = { name: post.author, avatar: post.authorAvatar, total: 0 };
-        userLikes[post.author].total += likes;
-    });
+    pickColor(x, y) {
+        const pixel = this.ctx.getImageData(x, y, 1, 1).data;
+        const hex = "#" + ((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1);
+        document.getElementById('color-picker').value = hex;
+        this.setTool('pencil'); // Автовозврат на карандаш
+    },
 
-    const sortedUsers = Object.values(userLikes).sort((a, b) => b.total - a.total).slice(0, 10);
-    
-    sortedUsers.forEach(u => {
-        if(!usersData[u.name]) usersData[u.name] = { ...u };
-        usersData[u
+    publishArt() {
+        const title = document.getElementById('art-title').value.trim() || 'Без названия';
+        const dataURL = this.canvas.toDataURL('image/png'); // Белый фон гарантирует корректность
+        
+        db.ref('posts').push({
+            author: app.currentUser,
+            title: title,
+            image: dataURL,
+            likes: 0,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+
+        document.getElementById('art-title').value = '';
+        app.navigate('main-screen');
+    }
+};
+
+// Запуск
+window.onload = () => app.init();
+        
