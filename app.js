@@ -1,15 +1,16 @@
-// Конфигурация Firebase (замени на свою в будущем)
+// Твоя конфигурация Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk", 
-    authDomain: "bitpaint-f7dbd.firebaseapp.com", 
-    databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com", 
-    projectId: "bitpaint-f7dbd", 
-    storageBucket: "bitpaint-f7dbd.firebasestorage.app", 
-    messagingSenderId: "193627137592", 
-    appId: "1:193627137592:web:4f3835e21c0adf024468cd"
+    apiKey: "AIzaSyD_tw7n8VErwWwqlJy_gWfATPY1cAUJzZk",
+    authDomain: "bitpaint-f7dbd.firebaseapp.com",
+    databaseURL: "https://bitpaint-f7dbd-default-rtdb.firebaseio.com",
+    projectId: "bitpaint-f7dbd",
+    storageBucket: "bitpaint-f7dbd.firebasestorage.app",
+    messagingSenderId: "193627137592",
+    appId: "1:193627137592:web:4f3835e21c0adf024468cd",
+    measurementId: "G-2JR3GPQ60R"
 };
 
-// Инициализация Firebase (Compat версия)
+// Инициализация Firebase (Compat версия для работы без локального сервера)
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -233,7 +234,7 @@ canvas.addEventListener('mousedown', startDraw);
 canvas.addEventListener('mousemove', draw);
 canvas.addEventListener('mouseup', stopDraw);
 canvas.addEventListener('mouseout', stopDraw);
-// Тач-события (с passive: false через addEventListener для e.preventDefault)
+// Тач-события
 canvas.addEventListener('touchstart', startDraw, {passive: false});
 canvas.addEventListener('touchmove', draw, {passive: false});
 canvas.addEventListener('touchend', stopDraw);
@@ -254,10 +255,9 @@ function floodFill(x, y, fillColor) {
     const startIdx = (y * w + x) * 4;
     const startR = data[startIdx], startG = data[startIdx+1], startB = data[startIdx+2], startA = data[startIdx+3];
     
-    // Проверка совпадения цвета (оптимизация)
     if (Math.abs(startR - fillColor[0]) < 10 && Math.abs(startG - fillColor[1]) < 10 && Math.abs(startB - fillColor[2]) < 10) return;
 
-    const tolerance = 50; // Допуск для сглаженных краев
+    const tolerance = 50; 
     function matchStartColor(idx) {
         return Math.abs(data[idx] - startR) <= tolerance &&
                Math.abs(data[idx+1] - startG) <= tolerance &&
@@ -296,11 +296,9 @@ function floodFill(x, y, fillColor) {
 document.getElementById('save-draw-btn').addEventListener('click', () => {
     const dataURL = canvas.toDataURL('image/png');
     if (currentDrawingId) {
-        // Редактирование старого (update только image)
         db.ref('drawings/' + currentDrawingId).update({ image: dataURL })
           .then(() => showScreen('main-screen'));
     } else {
-        // Новый рисунок
         const title = prompt("Введите название рисунка:") || "Без названия";
         db.ref('drawings').push({
             author: currentUser,
@@ -319,25 +317,20 @@ db.ref('drawings').on('value', snapshot => {
     const hall = document.getElementById('hall-container');
     const profileFeed = document.getElementById('profile-feed-container');
     
-    // Преобразуем в массив и сортируем по времени (новые сверху)
     const drawingsArray = Object.entries(data).map(([id, val]) => ({ id, ...val })).sort((a, b) => b.timestamp - a.timestamp);
     
-    // Собираем Топ-10 для Зала Славы
     const sortedByLikes = [...drawingsArray].sort((a, b) => Object.keys(b.likes || {}).length - Object.keys(a.likes || {}).length).slice(0, 10);
     renderList(hall, sortedByLikes, true);
     
-    // Рендер основной ленты и профиля
     renderList(feed, drawingsArray, false);
     renderList(profileFeed, drawingsArray.filter(d => d.author === currentUser), false);
     
-    // Считаем общие лайки профиля
     const myTotalLikes = drawingsArray.filter(d => d.author === currentUser)
         .reduce((sum, d) => sum + Object.keys(d.likes || {}).length, 0);
     document.getElementById('profile-likes-count').innerText = myTotalLikes;
 });
 
 function renderList(container, array, isHallOfFame) {
-    // Удаляем карточки, которых больше нет в БД
     const currentIds = array.map(d => `post-${container.id}-${d.id}`);
     Array.from(container.children).forEach(child => {
         if (!currentIds.includes(child.id)) child.remove();
@@ -350,12 +343,10 @@ function renderList(container, array, isHallOfFame) {
         const isLikedByMe = drawing.likes && drawing.likes[currentUser];
 
         if (!card) {
-            // Создаем новую карточку
             card = document.createElement('div');
             card.id = cardId;
             card.className = `post-card glow-panel ${isHallOfFame ? 'rank-' + (index + 1) : ''}`;
             
-            // Вставляем HTML структуру
             card.innerHTML = `
                 <img src="${drawing.image}" class="post-img" alt="Art">
                 <div class="post-info">
@@ -382,7 +373,6 @@ function renderList(container, array, isHallOfFame) {
             `;
             container.appendChild(card);
         } else {
-            // ТОЧЕЧНОЕ ОБНОВЛЕНИЕ (Smart Render) чтобы не моргало
             const likeBtn = card.querySelector('.like-btn');
             card.querySelector('.like-count').innerText = likesCount;
             if (isLikedByMe) {
@@ -394,7 +384,6 @@ function renderList(container, array, isHallOfFame) {
             }
         }
 
-        // Обновляем комментарии (если блок комментариев есть)
         if (!isHallOfFame) {
             const commentsBox = card.querySelector('.comments-section');
             if(commentsBox) {
@@ -407,7 +396,7 @@ function renderList(container, array, isHallOfFame) {
     });
 }
 
-// Глобальные функции для кнопок в карточках
+// Глобальные функции
 window.toggleLike = (id) => {
     const ref = db.ref(`drawings/${id}/likes/${currentUser}`);
     ref.once('value').then(snap => {
@@ -441,7 +430,6 @@ window.editPost = (id, imgData) => {
     img.src = imgData;
 };
 
-// Смена аватарки (демо, сохраняет только локально в целях экономии БД для примера)
 document.getElementById('change-avatar-btn').addEventListener('click', () => {
     const url = prompt("Введите URL новой аватарки:");
     if(url) {
@@ -449,3 +437,4 @@ document.getElementById('change-avatar-btn').addEventListener('click', () => {
         db.ref('users/' + currentUser).update({ avatar: url });
     }
 });
+        
