@@ -32,7 +32,40 @@ const app = {
         }
     },
 
-    login() {
+        login() {
+        const nickname = document.getElementById('login-nickname').value.trim();
+        if (nickname.length < 3) {
+            alert('Никнейм должен быть от 3 символов!');
+            return;
+        }
+        
+        this.currentUser = nickname;
+        localStorage.setItem('bitpaint_user', nickname);
+        
+        // 1. Сначала переключаем интерфейс, чтобы юзер видел, что кнопка работает
+        this.navigate('main-screen');
+
+        // 2. Оборачиваем работу с базой в try-catch для отлова ошибок
+        try {
+            db.ref('users/' + nickname).once('value')
+                .then(snap => {
+                    if (!snap.exists()) {
+                        db.ref('users/' + nickname).set({ avatar: 'https://via.placeholder.com/100', totalLikes: 0 });
+                    }
+                })
+                .catch(error => {
+                    console.error("Ошибка доступа к Firebase:", error);
+                    alert("Ошибка базы данных! Проверьте правила (Rules) в Firebase. Они должны быть .read: true, .write: true");
+                });
+
+            this.loadUserData();
+            this.listenToFeed();
+        } catch (error) {
+            console.error("Критическая ошибка инициализации Firebase:", error);
+            alert("Не удалось подключиться к базе данных. Проверьте ваш firebaseConfig в app.js!");
+        }
+    },
+    
         const nickname = document.getElementById('login-nickname').value.trim();
         if (nickname.length < 3) return alert('Никнейм должен быть от 3 символов!');
         
