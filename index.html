@@ -14,7 +14,7 @@
         <div class="auth-box glow-panel">
             <h1><i class="fas fa-paint-brush"></i> BitPaint</h1>
             <p>Войдите, чтобы начать творить</p>
-            <input type="text" id="nickname-input" placeholder="Ваш никнейм..." maxlength="20">
+            <input type="text" id="nickname-input" placeholder="Ваш никнейм..." maxlength="15">
             <button id="login-btn" class="neon-btn">Войти</button>
         </div>
     </div>
@@ -24,18 +24,15 @@
         <header class="top-nav glow-panel">
             <div class="logo"><i class="fas fa-paint-brush"></i> BitPaint</div>
             <div class="nav-buttons">
-                <button id="nav-hall-btn" class="icon-btn"><i class="fas fa-trophy"></i> Зал Славы</button>
+                <button id="nav-hall-btn" class="icon-btn"><i class="fas fa-trophy" style="color: gold;"></i> Зал Славы</button>
                 <button id="nav-draw-btn" class="neon-btn"><i class="fas fa-plus"></i> Рисовать</button>
             </div>
             <div class="user-profile-mini" id="nav-profile-btn">
-                <img id="user-avatar" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="avatar">
+                <img id="nav-user-avatar" src="" alt="avatar">
                 <span id="user-name-display">User</span>
             </div>
         </header>
-        
-        <main class="feed-container" id="feed-container">
-            <!-- Карточки будут рендериться здесь -->
-        </main>
+        <main class="feed-container" id="feed-container"></main>
     </div>
 
     <!-- Экран рисования (Канвас) -->
@@ -67,18 +64,23 @@
             <div class="separator"></div>
 
             <button id="undo-btn" class="icon-btn" title="Шаг назад (Ctrl+Z)"><i class="fas fa-undo"></i></button>
-            <button id="save-draw-btn" class="neon-btn"><i class="fas fa-save"></i> Публикация</button>
+            <button id="save-draw-btn" class="neon-btn"><i class="fas fa-save"></i> Сохранить</button>
             <button id="close-draw-btn" class="icon-btn danger"><i class="fas fa-times"></i></button>
         </div>
         <div class="canvas-container">
-            <canvas id="paint-canvas"></canvas>
+            <!-- Обертка для правильного масштабирования на мобилках -->
+            <div class="canvas-wrapper">
+                <canvas id="paint-canvas" width="800" height="600"></canvas>
+                <!-- Маска для рисования круглой аватарки -->
+                <div id="avatar-mask" class="hidden"></div>
+            </div>
         </div>
     </div>
 
     <!-- Экран Зала Славы -->
     <div id="hall-screen" class="screen hidden">
         <header class="top-nav glow-panel">
-            <h2><i class="fas fa-trophy"></i> Зал Славы</h2>
+            <h2><i class="fas fa-trophy" style="color: gold;"></i> Зал Славы (Топ-10)</h2>
             <button id="back-from-hall-btn" class="neon-btn">Назад</button>
         </header>
         <div class="hall-container" id="hall-container"></div>
@@ -91,9 +93,10 @@
             <button id="back-from-profile-btn" class="neon-btn">Назад</button>
         </header>
         <div class="profile-stats glow-panel">
+            <img id="profile-big-avatar" src="" alt="avatar" class="big-avatar">
             <h3 id="profile-name">Name</h3>
             <p>Собрано лайков: <span id="profile-likes-count">0</span></p>
-            <button id="change-avatar-btn" class="neon-btn">Изменить аватарку</button>
+            <button id="change-avatar-btn" class="neon-btn" style="margin-top:10px;"><i class="fas fa-paint-brush"></i> Нарисовать аватарку</button>
         </div>
         <div class="feed-container" id="profile-feed-container"></div>
     </div>
@@ -101,7 +104,6 @@
     <!-- Firebase Compat SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <!-- Основной скрипт -->
     <script src="app.js"></script>
 </body>
 </html>
