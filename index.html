@@ -2,106 +2,93 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitPaint - Neon Cyberpunk Canvas</title>
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BitPaint - Neon Cyberpunk</title>
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase Compat v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <!-- CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Auth Screen -->
-    <div id="auth-screen" class="screen active">
-        <div class="auth-card glow-box">
-            <h1 class="neon-text">BitPaint</h1>
-            <p>Войдите в кибер-пространство</p>
-            <input type="text" id="auth-nickname" placeholder="Ваш никнейм (от 3 символов)..." minlength="3">
-            <button id="auth-btn" class="btn btn-primary">Войти <i class="fas fa-sign-in-alt"></i></button>
+
+    <!-- Шапка (скрыта на экране авторизации) -->
+    <header id="main-header" class="hidden">
+        <div class="logo">BitPaint <i class="fas fa-paint-brush"></i></div>
+        <nav class="nav-links">
+            <button onclick="app.navigate('hall-screen')" title="Зал Славы"><i class="fas fa-trophy"></i></button>
+            <button onclick="app.navigate('main-screen')" title="Лента"><i class="fas fa-stream"></i></button>
+            <button onclick="app.navigate('draw-screen')" class="neon-btn" title="Рисовать"><i class="fas fa-plus"></i></button>
+        </nav>
+        <div class="user-info" onclick="app.navigate('profile-screen')">
+            <img id="header-avatar" src="https://via.placeholder.com/40" alt="Avatar">
+            <span id="header-username">User</span>
         </div>
-    </div>
+    </header>
 
-    <!-- Main App Screen -->
-    <div id="app-screen" class="screen">
-        <header id="header" class="glow-box">
-            <div class="logo neon-text">BitPaint</div>
-            <nav>
-                <button class="nav-btn active" data-target="feed-view"><i class="fas fa-stream"></i> Лента</button>
-                <button class="nav-btn" data-target="draw-view"><i class="fas fa-paint-brush"></i> Рисовать</button>
-                <button class="nav-btn" data-target="hof-view"><i class="fas fa-trophy"></i> Зал Славы</button>
-            </nav>
-            <div class="user-mini-profile" id="my-profile-btn">
-                <img id="nav-avatar" src="" alt="avatar">
-                <span id="nav-username">User</span>
+    <!-- Экран авторизации -->
+    <main id="auth-screen" class="screen">
+        <div class="auth-card neon-card">
+            <h1>BitPaint</h1>
+            <p>Войдите в неоновую сеть</p>
+            <input type="text" id="login-nickname" placeholder="Введите ваш никнейм..." autocomplete="off">
+            <button onclick="app.login()" class="neon-btn">Войти</button>
+        </div>
+    </main>
+
+    <!-- Главный экран (Лента) -->
+    <main id="main-screen" class="screen hidden">
+        <div id="feed-container" class="grid-container"></div>
+    </main>
+
+    <!-- Экран рисования (Канвас) -->
+    <main id="draw-screen" class="screen hidden">
+        <div class="toolbar neon-card">
+            <input type="text" id="art-title" placeholder="Название шедевра..." autocomplete="off">
+            <div class="tools">
+                <button onclick="canvasApp.setTool('pencil')" class="active" id="tool-pencil"><i class="fas fa-pencil-alt"></i></button>
+                <button onclick="canvasApp.setTool('line')" id="tool-line"><i class="fas fa-slash"></i></button>
+                <button onclick="canvasApp.setTool('rect')" id="tool-rect"><i class="far fa-square"></i></button>
+                <button onclick="canvasApp.setTool('circle')" id="tool-circle"><i class="far fa-circle"></i></button>
+                <button onclick="canvasApp.setTool('eraser')" id="tool-eraser"><i class="fas fa-eraser"></i></button>
+                <button onclick="canvasApp.setTool('eyedropper')" id="tool-eyedropper"><i class="fas fa-eye-dropper"></i></button>
             </div>
-        </header>
-
-        <main id="main-content">
-            <!-- Feed View -->
-            <div id="feed-view" class="view active">
-                <h2 class="neon-text">Глобальная Лента</h2>
-                <div id="feed-container" class="grid-container"></div>
+            <div class="settings">
+                <input type="color" id="color-picker" value="#8a2be2">
+                <input type="range" id="line-width" min="1" max="20" value="3">
             </div>
+            <button onclick="canvasApp.publishArt()" class="neon-btn"><i class="fas fa-paper-plane"></i> В ленту</button>
+        </div>
+        <div id="canvas-wrapper">
+            <canvas id="paint-canvas"></canvas>
+        </div>
+    </main>
 
-            <!-- Draw View -->
-            <div id="draw-view" class="view">
-                <div class="toolbar glow-box">
-                    <button id="tool-undo" class="tool-btn" title="Шаг назад"><i class="fas fa-undo"></i></button>
-                    <div class="divider"></div>
-                    <input type="color" id="tool-color" value="#8a2be2" title="Цвет">
-                    <input type="range" id="tool-size" min="1" max="50" value="5" title="Размер кисти">
-                    <label class="toggle-neon"><input type="checkbox" id="tool-neon"> Неон</label>
-                    <div class="divider"></div>
-                    <select id="tool-texture" class="cyber-select">
-                        <option value="outline">Контур</option>
-                        <option value="fill">Сплошная заливка</option>
-                        <option value="wood">Текстура: Дерево</option>
-                        <option value="brick">Текстура: Кирпич</option>
-                    </select>
-                    <div class="divider"></div>
-                    <button class="tool-btn active" data-tool="pencil" title="Карандаш"><i class="fas fa-pencil-alt"></i></button>
-                    <button class="tool-btn" data-tool="line" title="Линия"><i class="fas fa-slash"></i></button>
-                    <button class="tool-btn" data-tool="rect" title="Прямоугольник"><i class="far fa-square"></i></button>
-                    <button class="tool-btn" data-tool="circle" title="Круг"><i class="far fa-circle"></i></button>
-                    <button class="tool-btn" data-tool="eraser" title="Ластик"><i class="fas fa-eraser"></i></button>
-                    <button class="tool-btn" data-tool="eyedropper" title="Пипетка"><i class="fas fa-eye-dropper"></i></button>
-                    <button class="tool-btn" data-tool="bucket" title="Заливка"><i class="fas fa-fill-drip"></i></button>
-                    <div class="spacer"></div>
-                    <input type="text" id="draw-title" placeholder="Название шедевра..." class="cyber-input">
-                    <button id="publish-btn" class="btn btn-primary"><i class="fas fa-paper-plane"></i> В ленту</button>
-                </div>
-                <div class="canvas-container">
-                    <canvas id="main-canvas" width="1280" height="720"></canvas>
-                </div>
+    <!-- Зал Славы -->
+    <main id="hall-screen" class="screen hidden">
+        <h2 class="screen-title">Зал Славы <i class="fas fa-crown"></i></h2>
+        <div id="hall-container" class="list-container"></div>
+    </main>
+
+    <!-- Профиль -->
+    <main id="profile-screen" class="screen hidden">
+        <div class="profile-header neon-card">
+            <img id="profile-avatar" src="https://via.placeholder.com/100" alt="Avatar">
+            <h2 id="profile-name">User</h2>
+            <p>Всего лайков: <span id="profile-likes-total" class="neon-text">0</span> <i class="fas fa-heart"></i></p>
+            <div class="avatar-edit">
+                <input type="text" id="avatar-url-input" placeholder="URL новой аватарки...">
+                <button onclick="app.updateAvatar()" class="neon-btn">Обновить</button>
+                <button onclick="app.logout()" class="neon-btn" style="background: #ff2a2a; border-color: #ff2a2a;">Выйти</button>
             </div>
+        </div>
+        <h3 class="screen-title">Мои работы</h3>
+        <div id="profile-grid" class="grid-container"></div>
+    </main>
 
-            <!-- Hall of Fame View -->
-            <div id="hof-view" class="view">
-                <h2 class="neon-text"><i class="fas fa-trophy"></i> Зал Славы (Топ 10)</h2>
-                <div id="hof-container" class="hof-list"></div>
-            </div>
-
-            <!-- Profile View -->
-            <div id="profile-view" class="view">
-                <div class="profile-header glow-box">
-                    <img id="profile-avatar" src="" alt="Avatar">
-                    <div class="profile-info">
-                        <h2 id="profile-name" class="neon-text">Name</h2>
-                        <p>Собрано лайков: <span id="profile-likes" class="neon-text">0</span> <i class="fas fa-heart" style="color:var(--danger)"></i></p>
-                        <button id="change-avatar-btn" class="btn btn-small" style="display:none;">Изменить аватар</button>
-                    </div>
-                </div>
-                <h3 class="neon-text" style="margin-top: 20px;">Галерея работ</h3>
-                <div id="profile-gallery" class="grid-container"></div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Firebase v8 Compat -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <!-- App Logic -->
+    <!-- JS -->
     <script src="app.js"></script>
 </body>
 </html>
